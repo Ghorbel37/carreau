@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Carreau</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<style>
+/* Layout: one-screen notebook page — header, a panel (rules / target / results), then the board framed by its four edge arrows. */
+:root {
+  --paper: #f3f6f9;      /* squared notebook paper */
+  --rule: #cfdbea;       /* faint blue lines */
+  --margin: #d4605a;     /* red margin line */
+  --ink: #22306a;        /* blue-black pen */
+  --ink-soft: #5d6a94;
+  --green: #17845a;      /* the green pen from the signatures — success */
+  --card: rgba(255,255,255,.72);
+  --display: "Kalam", "Comic Sans MS", "Segoe Print", cursive;
+  --body: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #131a2c; --rule: #222d47; --margin: #a8504c; --ink: #e2e8ff; --ink-soft: #9aa6cc;
+    --green: #4fd08d; --card: rgba(24,32,54,.8); color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #131a2c; --rule: #222d47; --margin: #a8504c; --ink: #e2e8ff; --ink-soft: #9aa6cc;
+  --green: #4fd08d; --card: rgba(24,32,54,.8); color-scheme: dark;
+}
+
+html, body { height: 100%; }
+[hidden] { display: none !important; }
+body {
+  margin: 0;
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(90deg, transparent 10px, var(--margin) 10px, var(--margin) 11.5px, transparent 11.5px),
+    repeating-linear-gradient(180deg, transparent 0 27px, var(--rule) 27px 28px);
+  color: var(--ink);
+  font: 16px/1.4 var(--body);
+  -webkit-tap-highlight-color: transparent;
+  user-select: none; -webkit-user-select: none;
+  overflow: hidden;
+}
+.app {
+  height: 100%;
+  box-sizing: border-box;
+  max-width: 520px;
+  margin: 0 auto;
+  padding-inline: 20px 16px;
+  padding-block: 10px 14px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+h1 { font: 700 2.3rem/1 var(--display); margin: 0; letter-spacing: .01em; }
+h1 span { color: var(--green); }
+.best { font-size: .8rem; color: var(--ink-soft); text-transform: uppercase; letter-spacing: .08em; font-variant-numeric: tabular-nums; }
+.best b { color: var(--ink); font-size: 1rem; }
+
+/* Panel */
+.panel {
+  background: var(--card);
+  border: 2px solid var(--ink);
+  border-radius: 6px 10px 7px 12px;
+  padding: 12px 14px;
+  min-height: 118px;
+  box-sizing: border-box;
+}
+.rules { display: flex; flex-direction: column; gap: 8px; }
+.rules p { margin: 0; font-size: .92rem; max-width: 60ch; }
+.rules p strong { font-family: var(--display); font-size: 1.1rem; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+button.go {
+  font: 700 1.25rem/1 var(--display);
+  color: var(--paper); background: var(--ink);
+  border: 0; border-radius: 8px 12px 9px 13px;
+  padding: 10px 22px 8px; cursor: pointer;
+}
+button.go:focus-visible, .edge:focus-visible { outline: 3px solid var(--green); outline-offset: 3px; }
+.muted { color: var(--ink-soft); font-size: .85rem; }
+
+.hud { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: center; }
+.target-wrap { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.label { font-size: .7rem; text-transform: uppercase; letter-spacing: .1em; color: var(--ink-soft); }
+.stats { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.nums { display: flex; justify-content: space-between; gap: 8px; font-variant-numeric: tabular-nums; }
+.nums div { display: flex; flex-direction: column; }
+.nums b { font: 700 1.7rem/1 var(--display); }
+.timebar { height: 10px; border: 2px solid var(--ink); border-radius: 6px; overflow: hidden; }
+.timebar i { display: block; height: 100%; width: 100%; background: var(--ink); transform-origin: left; }
+.timebar.low i { background: var(--margin); }
+.moves { font-size: .8rem; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+
+/* Board */
+.stage {
+  flex: 1; min-height: 0;
+  display: grid; place-items: center;
+  touch-action: none;
+}
+.frame {
+  --size: min(calc(100vw - 132px), calc(100dvh - 300px), 400px);
+  display: grid;
+  grid-template-columns: 44px var(--size) 44px;
+  grid-template-rows: 44px var(--size) 44px;
+  gap: 4px;
+}
+.edge {
+  background: none; border: 0; color: var(--ink); cursor: pointer; padding: 0;
+  display: grid; place-items: center; border-radius: 8px;
+}
+.edge svg { width: 36px; height: 22px; }
+.edge.v svg { transform: rotate(90deg); }
+.edge.fire { animation: fire .3s ease-out; }
+@keyframes fire { 0% { background: color-mix(in srgb, var(--green) 30%, transparent); } 100% { background: transparent; } }
+.edge.top { grid-area: 1 / 2; } .edge.bottom { grid-area: 3 / 2; }
+.edge.left { grid-area: 2 / 1; } .edge.right { grid-area: 2 / 3; }
+
+.board {
+  grid-area: 2 / 2;
+  position: relative;
+  border: 3px solid var(--ink);
+  border-radius: 3px 5px 2px 6px;
+  background: color-mix(in srgb, var(--paper) 85%, transparent);
+  box-sizing: border-box;
+}
+.board.mini { width: 74px; height: 74px; border-width: 2px; }
+.piece {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2.5px solid var(--ink);
+  border-radius: 2px 4px 3px 2px;
+  background: repeating-linear-gradient(135deg, var(--ink) 0 1.5px, transparent 1.5px 9px);
+  transition: width .18s cubic-bezier(.3,1.5,.6,1), height .18s cubic-bezier(.3,1.5,.6,1), border-color .2s;
+}
+.mini .piece { border-width: 1.5px; background: repeating-linear-gradient(135deg, var(--ink) 0 1px, transparent 1px 5px); }
+.piece.tl { left: -1.5px; top: -1.5px; } .piece.tr { right: -1.5px; top: -1.5px; }
+.piece.bl { left: -1.5px; bottom: -1.5px; } .piece.br { right: -1.5px; bottom: -1.5px; }
+.board.win .piece {
+  border-color: var(--green);
+  background: repeating-linear-gradient(135deg, var(--green) 0 2px, transparent 2px 7px);
+}
+.hint { text-align: center; font: 400 1.05rem/1.2 var(--display); color: var(--ink-soft); margin: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .piece { transition: none; }
+  .edge.fire { animation: none; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Carr<span>eau</span></h1>
+    <div class="best">Best <b id="best">0</b></div>
+  </header>
+
+  <section class="panel" id="panel">
+    <div class="rules" id="menu">
+      <p><strong>Swipe to reshape.</strong> A swipe across the top half stretches or shrinks the two top pieces sideways. A swipe up or down in the left half does the same to the left pieces' height. Each edge works its own pair.</p>
+      <p class="muted">Match the small target before the clock runs out. Hit it in the fewest moves for bonus time.</p>
+      <div class="row"><button class="go" id="start">Start · 60 s</button><span class="muted">Try the board below first.</span></div>
+    </div>
+
+    <div class="hud" id="hud" hidden>
+      <div class="target-wrap">
+        <span class="label">Make this</span>
+        <div class="board mini" id="target"></div>
+      </div>
+      <div class="stats">
+        <div class="nums">
+          <div><span class="label">Score</span><b id="score">0</b></div>
+          <div><span class="label">Perfect</span><b id="perfect">0</b></div>
+          <div><span class="label">Time</span><b id="time">60</b></div>
+        </div>
+        <div class="timebar" id="timebar"><i id="timefill"></i></div>
+        <div class="moves" id="moves">Moves 0 · best possible 0</div>
+      </div>
+    </div>
+
+    <div class="rules" id="over" hidden>
+      <p><strong id="overTitle">Time's up.</strong> <span id="overText"></span></p>
+      <div class="row"><button class="go" id="again">Play again</button></div>
+    </div>
+  </section>
+
+  <main class="stage" id="stage">
+    <div class="frame">
+      <button class="edge top" data-edge="top" aria-label="Top pair: change width"></button>
+      <button class="edge left v" data-edge="left" aria-label="Left pair: change height"></button>
+      <div class="board" id="board"></div>
+      <button class="edge right v" data-edge="right" aria-label="Right pair: change height"></button>
+      <button class="edge bottom" data-edge="bottom" aria-label="Bottom pair: change width"></button>
+    </div>
+  </main>
+  <p class="hint" id="hint">swipe ⇄ top / bottom half · ⇅ left / right half</p>
+</div>
+
+<script>
+(() => {
+  // Each corner piece has a width and height of 1 or 2 units on a 5×5 board.
+  // 1×1 = carreau, 2×1 = rectangle horizontal, 1×2 = rectangle vertical, 2×2 = carreau grand.
+  const CORNERS = ['tl', 'tr', 'bl', 'br'];
+  // A horizontal swipe toggles width, a vertical swipe toggles height — for the pair on that edge.
+  const EDGES = {
+    top:    ['tl', 'tr', 'w'],
+    bottom: ['bl', 'br', 'w'],
+    left:   ['tl', 'bl', 'h'],
+    right:  ['tr', 'br', 'h'],
+  };
+  const UNIT = 20; // percent of the board per unit
+  const START_TIME = 60, MAX_TIME = 60;
+
+  const $ = id => document.getElementById(id);
+  const boardEl = $('board'), targetEl = $('target');
+
+  const arrowSvg = '<svg viewBox="0 0 40 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h31M29 2l6 5"/><path d="M36 17H5M11 22l-6-5"/></svg>';
+  document.querySelectorAll('.edge').forEach(b => b.innerHTML = arrowSvg);
+
+  const initial = () => ({ tl: { w: 1, h: 2 }, tr: { w: 2, h: 2 }, bl: { w: 1, h: 1 }, br: { w: 2, h: 1 } });
+  const clone = s => JSON.parse(JSON.stringify(s));
+  const same = (a, b) => CORNERS.every(c => a[c].w === b[c].w && a[c].h === b[c].h);
+  function apply(s, edge) {
+    const [a, b, k] = EDGES[edge];
+    s[a][k] = 3 - s[a][k];
+    s[b][k] = 3 - s[b][k];
+  }
+
+  function makePieces(el) {
+    const map = {};
+    CORNERS.forEach(c => { const p = document.createElement('div'); p.className = 'piece ' + c; el.appendChild(p); map[c] = p; });
+    return map;
+  }
+  const boardPieces = makePieces(boardEl), targetPieces = makePieces(targetEl);
+  function render(pieces, s) {
+    CORNERS.forEach(c => {
+      pieces[c].style.width = `calc(${s[c].w * UNIT}% + 3px)`;
+      pieces[c].style.height = `calc(${s[c].h * UNIT}% + 3px)`;
+    });
+  }
+
+  let best = 0;
+  try { best = +localStorage.getItem('carreau-best') || 0; } catch (e) {}
+  $('best').textContent = best;
+
+  let state = initial();
+  let target = null, playing = false, locked = false;
+  let score = 0, perfect = 0, moves = 0, optimal = 0, timeLeft = START_TIME, last = 0;
+
+  function newTarget() {
+    // Every edge move is its own inverse and moves commute, so a target made from
+    // k distinct edges is exactly k moves away.
+    const k = score < 3 ? 1 + (Math.random() < .5) : score < 8 ? 2 + (Math.random() < .5) : 2 + Math.floor(Math.random() * 3);
+    const edges = Object.keys(EDGES).sort(() => Math.random() - .5).slice(0, k);
+    target = clone(state);
+    edges.forEach(e => apply(target, e));
+    optimal = k; moves = 0;
+    render(targetPieces, target);
+    updateHud();
+  }
+
+  function updateHud() {
+    $('score').textContent = score;
+    $('perfect').textContent = perfect;
+    $('time').textContent = Math.ceil(timeLeft);
+    $('timefill').style.transform = `scaleX(${Math.max(0, timeLeft / MAX_TIME)})`;
+    $('timebar').classList.toggle('low', timeLeft < 10);
+    $('moves').textContent = `Moves ${moves} · best possible ${optimal}`;
+  }
+
+  function fireEdge(edge) {
+    const btn = document.querySelector(`.edge[data-edge="${edge}"]`);
+    btn.classList.remove('fire'); void btn.offsetWidth; btn.classList.add('fire');
+  }
+
+  function move(edge) {
+    if (locked) return;
+    apply(state, edge);
+    render(boardPieces, state);
+    fireEdge(edge);
+    try { navigator.vibrate && navigator.vibrate(8); } catch (e) {}
+    if (!playing) return;
+    moves++;
+    if (same(state, target)) {
+      score++;
+      const wasPerfect = moves === optimal;
+      if (wasPerfect) perfect++;
+      timeLeft = Math.min(MAX_TIME, timeLeft + (wasPerfect ? 3 : 1));
+      $('hint').textContent = wasPerfect ? 'perfect! +3 s' : 'matched +1 s';
+      locked = true;
+      boardEl.classList.add('win');
+      setTimeout(() => { boardEl.classList.remove('win'); locked = false; if (playing) newTarget(); }, 320);
+    }
+    updateHud();
+  }
+
+  function tick(t) {
+    if (!playing) return;
+    timeLeft -= (t - last) / 1000; last = t;
+    if (timeLeft <= 0) { timeLeft = 0; updateHud(); return end(); }
+    updateHud();
+    requestAnimationFrame(tick);
+  }
+
+  function start() {
+    score = 0; perfect = 0; timeLeft = START_TIME; playing = true; locked = false;
+    $('menu').hidden = true; $('over').hidden = true; $('hud').hidden = false;
+    $('hint').textContent = 'match the target';
+    newTarget();
+    last = performance.now();
+    requestAnimationFrame(tick);
+  }
+
+  function end() {
+    playing = false;
+    const isBest = score > best;
+    if (isBest) { best = score; try { localStorage.setItem('carreau-best', best); } catch (e) {} }
+    $('best').textContent = best;
+    $('hud').hidden = true; $('over').hidden = false;
+    $('overTitle').textContent = isBest ? 'New best!' : "Time's up.";
+    $('overText').textContent = `${score} shapes matched, ${perfect} of them in the fewest moves. Best so far: ${best}.`;
+    $('hint').textContent = 'swipe ⇄ top / bottom half · ⇅ left / right half';
+  }
+
+  $('start').addEventListener('click', start);
+  $('again').addEventListener('click', start);
+  document.querySelectorAll('.edge').forEach(b => b.addEventListener('click', () => move(b.dataset.edge)));
+
+  // Swipes: direction picks width vs height, the half of the board where the swipe starts picks the pair.
+  const stage = $('stage');
+  let down = null;
+  stage.addEventListener('pointerdown', e => {
+    if (e.target.closest('.edge')) return;
+    down = { x: e.clientX, y: e.clientY };
+  });
+  window.addEventListener('pointerup', e => {
+    if (!down) return;
+    const dx = e.clientX - down.x, dy = e.clientY - down.y;
+    const r = boardEl.getBoundingClientRect();
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    const start = down; down = null;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
+    if (Math.abs(dx) > Math.abs(dy)) move(start.y < cy ? 'top' : 'bottom');
+    else move(start.x < cx ? 'left' : 'right');
+  });
+  window.addEventListener('pointercancel', () => { down = null; });
+
+  // Keyboard: the arrow pointing at an edge works that edge (also W A S D).
+  const KEYS = { ArrowUp: 'top', w: 'top', ArrowDown: 'bottom', s: 'bottom', ArrowLeft: 'left', a: 'left', ArrowRight: 'right', d: 'right' };
+  window.addEventListener('keydown', e => {
+    const edge = KEYS[e.key] || KEYS[e.key.toLowerCase?.()];
+    if (edge) { e.preventDefault(); move(edge); }
+    else if (e.key === 'Enter' && !playing) start();
+  });
+
+  render(boardPieces, state);
+})();
+</script>
+</body>
+</html>
