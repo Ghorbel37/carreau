@@ -4,9 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Carreau</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<meta name="theme-color" content="#f3f6f9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#131a2c" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="fonts/fonts.css">
 <style>
 /* Layout: one-screen notebook page — header, a panel (modes / levels / target / results), then the board framed by its four edge arrows. */
 :root {
@@ -51,7 +54,7 @@ body {
   max-width: 520px;
   margin: 0 auto;
   padding-inline: 20px 16px;
-  padding-block: 10px 12px;
+  padding-block: calc(10px + env(safe-area-inset-top, 0px)) calc(12px + env(safe-area-inset-bottom, 0px));
   display: flex; flex-direction: column; gap: 10px;
 }
 header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -295,61 +298,14 @@ button:focus-visible { outline: 3px solid var(--green); outline-offset: 3px; }
   <p class="hint" id="hint"></p>
 </div>
 
+<script src="core.js"></script>
 <script>
 (() => {
-  // ---------- Model ----------
-  // Each corner piece has a width and height of 1 or 2 units on a 5×5 board.
-  // 1×1 = carreau, 2×1 = rectangle horizontal, 1×2 = rectangle vertical, 2×2 = carreau grand.
-  const CORNERS = ['tl', 'tr', 'bl', 'br'];
-  // A horizontal swipe toggles width, a vertical swipe toggles height — for the pair on that edge.
-  // Moves are their own inverse and commute, so a target made from k distinct edges is exactly k moves away.
-  const EDGES = {
-    top:    ['tl', 'tr', 'w'],
-    bottom: ['bl', 'br', 'w'],
-    left:   ['tl', 'bl', 'h'],
-    right:  ['tr', 'br', 'h'],
-  };
+  // ---------- Model (rules live in core.js) ----------
+  const { CORNERS, EDGES, LEVEL_COUNT, initial, clone, same, apply, randomEdges, levelDef, starsFor } = window.CarreauCore;
   const UNIT = 20; // percent of the board per unit
-  const RUSH_TIME = 60, LEVEL_COUNT = 30;
+  const RUSH_TIME = 60;
   const DEFAULT_HINT = 'swipe ⇄ top / bottom half · ⇅ left / right half';
-
-  const initial = () => ({ tl: { w: 1, h: 2 }, tr: { w: 2, h: 2 }, bl: { w: 1, h: 1 }, br: { w: 2, h: 1 } });
-  const clone = s => JSON.parse(JSON.stringify(s));
-  const same = (a, b) => CORNERS.every(c => a[c].w === b[c].w && a[c].h === b[c].h);
-  function apply(s, edge) {
-    const [a, b, k] = EDGES[edge];
-    s[a][k] = 3 - s[a][k];
-    s[b][k] = 3 - s[b][k];
-  }
-  function shuffle(a, rnd) {
-    for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
-    return a;
-  }
-  const randomEdges = (k, rnd = Math.random) => shuffle(Object.keys(EDGES), rnd).slice(0, k);
-  function seeded(seed) { // mulberry32 — levels are the same on every device
-    return () => {
-      seed = seed + 0x6D2B79F5 | 0;
-      let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
-      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
-      return ((t ^ t >>> 14) >>> 0) / 4294967296;
-    };
-  }
-  function levelDef(n) {
-    const r = seeded(n * 7919 + 17);
-    const start = {};
-    CORNERS.forEach(c => { start[c] = { w: 1 + (r() < .5), h: 1 + (r() < .5) }; });
-    const count = n <= 8 ? 1 : n <= 18 ? 2 : 3;
-    const targets = [];
-    let cur = start, optimal = 0;
-    for (let i = 0; i < count; i++) {
-      const k = n <= 3 ? 1 : n <= 8 ? 2 + Math.floor(r() * 3) : 1 + Math.floor(r() * 4);
-      const t = clone(cur);
-      randomEdges(k, r).forEach(e => apply(t, e));
-      targets.push(t); optimal += k; cur = t;
-    }
-    const slack = n <= 10 ? 3 : n <= 20 ? 2 : 1;
-    return { start, targets, optimal, budget: optimal + slack };
-  }
 
   // ---------- Storage (optional; the game works without it) ----------
   const store = {
@@ -406,11 +362,17 @@ button:focus-visible { outline: 3px solid var(--green); outline-offset: 3px; }
       }
     },
   };
-  function haptic(pattern) {
-    if (!settings.vibe) return;
-    try { navigator.vibrate && navigator.vibrate(pattern); } catch (e) {}
-  }
   const HAPTICS = { match: 18, perfect: [15, 40, 25], step: 14, clear: [20, 40, 20, 40, 60], fail: [40, 30, 40] };
+  // In the Capacitor app the native Haptics plugin is used (iOS has no navigator.vibrate).
+  const NATIVE_HAPTICS = { match: ['impact', { style: 'LIGHT' }], step: ['impact', { style: 'LIGHT' }], perfect: ['impact', { style: 'MEDIUM' }], clear: ['notification', { type: 'SUCCESS' }], fail: ['notification', { type: 'ERROR' }] };
+  function haptic(kind) {
+    if (!settings.vibe) return;
+    try {
+      const native = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Haptics;
+      if (native) { const [fn, opts] = NATIVE_HAPTICS[kind]; native[fn](opts); return; }
+      if (navigator.vibrate) navigator.vibrate(HAPTICS[kind]);
+    } catch (e) {}
+  }
 
   // ---------- Rendering ----------
   const $ = id => document.getElementById(id);
@@ -574,7 +536,7 @@ button:focus-visible { outline: 3px solid var(--green); outline-offset: 3px; }
       const d = G.def;
       setStats([['Level', G.level], ['Target', `${Math.min(G.ti + 1, d.targets.length)}/${d.targets.length}`], ['Moves', `${G.moves}/${d.budget}`]]);
       setBar(1 - G.moves / d.budget, d.budget - G.moves <= 1);
-      $('line').textContent = `★★★ in ${d.optimal} · ★★ in ${d.optimal + 1}`;
+      $('line').textContent = d.budget === d.optimal ? `Perfect only: ${d.optimal} moves` : `★★★ in ${d.optimal} · ★★ in ${d.optimal + 2}`;
     }
   }
 
@@ -583,14 +545,14 @@ button:focus-visible { outline: 3px solid var(--green); outline-offset: 3px; }
     boardEl.classList.add('win');
     setTimeout(() => boardEl.classList.remove('win'), 380);
     audio.play(kind);
-    haptic(HAPTICS[kind]);
+    haptic(kind);
   }
   function miss() {
     restart(boardEl, 'shake');
     boardEl.classList.add('miss');
     setTimeout(() => boardEl.classList.remove('miss'), 700);
     audio.play('fail');
-    haptic(HAPTICS.fail);
+    haptic('fail');
   }
 
   function move(edge) {
@@ -659,7 +621,7 @@ button:focus-visible { outline: 3px solid var(--green); outline-offset: 3px; }
 
   function levelWin() {
     const d = G.def, n = G.level;
-    const got = G.moves <= d.optimal ? 3 : G.moves <= d.optimal + 1 ? 2 : 1;
+    const got = starsFor(G.moves, d.optimal);
     if (got > (stars[n] || 0)) { stars[n] = got; store.set('carreau-levels', stars); }
     G.locked = true;
     say(`level ${n} cleared`, 'good');
@@ -760,7 +722,7 @@ button:focus-visible { outline: 3px solid var(--green); outline-offset: 3px; }
   });
   $('vibeBtn').addEventListener('click', () => {
     settings.vibe = !settings.vibe; store.set('carreau-settings', settings); syncToggles();
-    haptic(HAPTICS.match);
+    haptic('match');
   });
 
   // ---------- Input ----------
@@ -798,6 +760,11 @@ button:focus-visible { outline: 3px solid var(--green); outline-offset: 3px; }
   syncToggles();
   render(boardPieces, state);
   goHome();
+
+  // Offline support on the web (the Capacitor app already ships its files).
+  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !window.Capacitor) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  }
 })();
 </script>
 </body>
