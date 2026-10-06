@@ -17,9 +17,20 @@ Each corner piece is one of four shapes:
 - A **vertical swipe** (↑ or ↓) toggles its height: carreau ↔ rectangle vertical, rectangle horizontal ↔ carreau grand.
 - Where you swipe picks the pair: a horizontal swipe in the top half affects the two top pieces, bottom half the two bottom ones; a vertical swipe in the left half affects the two left pieces, right half the two right ones. The arrows around the board do the same when tapped.
 
-Match the target shape shown above the board before the 60-second clock runs out. Matching in the fewest possible moves gives +3 s, otherwise +1 s.
+## Modes
+
+- **Rush**: match as many target shapes as you can in 60 seconds. A match in the fewest possible moves gives +3 s, any other match +1 s.
+- **Levels**: 30 fixed puzzles with a move limit. Later levels chain two or three targets to hit in order. Fewest moves earns ★★★, one extra move ★★, otherwise ★. Clearing a level unlocks the next.
+- **Memory**: the target shows briefly, then hides. Rebuild it in exactly the minimum number of moves. Three lives.
+- **Zen**: endless targets, no clock.
+
+Sound (synthesized with Web Audio) and vibration on a correct match can each be switched off with the buttons in the top right. Settings, best scores and level stars are saved on the device.
 
 Desktop: arrow keys or W A S D (the arrow points at the edge it works).
+
+## Platform plan
+
+The game stays a web app and will be wrapped with [Capacitor](https://capacitorjs.com/) for the Android APK (and iOS later). Note that browsers on iPhone do not support vibration; the Capacitor Haptics plugin will cover that in the app build.
 
 ## Run it
 
