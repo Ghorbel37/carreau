@@ -41,6 +41,8 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -55,11 +57,33 @@ jobs:
       - run: npm ci
       - name: Copy the web game into the Android project
         run: npx cap sync android
-      - name: Build debug APK
+      - name: Build APK
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon
+        run: ./gradlew assembleRelease --no-daemon
+      - name: Check the APK
+        run: |
+          apk=android/app/build/outputs/apk/release/app-release.apk
+          test -s "$apk"
+          aapt=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)aapt2
+          "$aapt" dump badging "$apk" | grep -E "package:|application-label:|sdkVersion"
+          "$(dirname "$aapt")/apksigner" verify --print-certs "$apk" | grep "Carreau test build"
+          cp "$apk" carreau.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: carreau-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: carreau-apk
+          path: carreau.apk
           retention-days: 30
+      - name: Publish as the latest release (one-tap download on the phone)
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Carreau 1.1.${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          make_latest: true
+          files: carreau.apk
+          body: |
+            Test build from `${{ github.ref_name }}` @ ${{ github.sha }}.
+
+            Install on Android: download `carreau.apk` on the phone, open it, and allow installs from this source when asked.
+            New builds install over this one and keep your progress.

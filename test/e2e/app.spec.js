@@ -17,17 +17,53 @@ test('ships its own fonts, icons and manifest', async ({ page, request }) => {
   expect(errors).toEqual([]);
 });
 
-test('uses native haptics inside the Capacitor app', async ({ page }) => {
-  await page.addInitScript(() => {
-    window.__native = [];
-    const rec = name => opts => { window.__native.push([name, opts]); return Promise.resolve(); };
-    window.Capacitor = { Plugins: { Haptics: { impact: rec('impact'), notification: rec('notification') } } };
+test.describe('inside the Capacitor app', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      window.__native = [];
+      const rec = (plugin, name) => (...args) => { window.__native.push([plugin, name, args[0]]); return Promise.resolve(); };
+      window.__back = null;
+      window.Capacitor = { Plugins: {
+        Haptics: { impact: rec('Haptics', 'impact'), notification: rec('Haptics', 'notification') },
+        App: { addListener: (ev, cb) => { if (ev === 'backButton') window.__back = cb; return Promise.resolve({ remove() {} }); }, exitApp: rec('App', 'exitApp') },
+        SystemBars: { setStyle: rec('SystemBars', 'setStyle') },
+      } };
+    });
   });
-  await page.goto('/');
-  await page.locator('[data-mode=zen]').click();
-  await solve(page);
-  await expect.poll(() => page.evaluate(() => window.__native.length)).toBe(1);
-  expect((await page.evaluate(() => window.__native))[0][0]).toBe('impact');
+  const calls = (page, plugin) => page.evaluate(p => window.__native.filter(c => c[0] === p), plugin);
+
+  test('uses native haptics', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('[data-mode=zen]').click();
+    await solve(page);
+    await expect.poll(async () => (await calls(page, 'Haptics')).length).toBe(1);
+    expect((await calls(page, 'Haptics'))[0][1]).toBe('impact');
+  });
+
+  test('sets status bar icons for the theme', async ({ page }) => {
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await page.goto('/');
+    expect((await calls(page, 'SystemBars'))[0][2]).toEqual({ style: 'DARK' });
+  });
+
+  test('the back button steps back, then leaves the app from the menu', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('[data-mode=levels]').click();
+    await page.evaluate(() => window.__back());
+    await expect(page.locator('#home')).toBeVisible();
+    await page.locator('[data-mode=zen]').click();
+    await page.evaluate(() => window.__back());
+    await expect(page.locator('#home')).toBeVisible();
+    expect(await calls(page, 'App')).toEqual([]);
+    await page.evaluate(() => window.__back());
+    expect((await calls(page, 'App')).map(c => c[1])).toEqual(['exitApp']);
+  });
+
+  test('does not register the web offline cache', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('load');
+    expect(await page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length)).toBe(0);
+  });
 });
 
 test.describe('offline', () => {

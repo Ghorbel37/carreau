@@ -1,41 +1,52 @@
 const { test, expect } = require('@playwright/test');
-const { readBoard, currentTarget, pathTo, press, solve, swipe, trackErrors } = require('./helpers');
+const { boardState, currentTarget, pathTo, press, solve, swipe, chooseWorld, trackErrors } = require('./helpers');
 
-const SKETCH = { tl: { w: 1, h: 2 }, tr: { w: 2, h: 2 }, bl: { w: 1, h: 1 }, br: { w: 2, h: 1 } };
+// Square world pieces [a, b]: top-left, top-right, bottom-right, bottom-left (see core.js).
+const SKETCH = [[2, 1], [2, 2], [1, 2], [1, 1]];
+const TOP = 0, RIGHT = 1, BOTTOM = 2, LEFT = 3;
 
 let errors;
 test.beforeEach(async ({ page }) => { errors = trackErrors(page); });
 test.afterEach(() => { expect(errors, 'no page errors').toEqual([]); });
 
 test.describe('home and controls', () => {
-  test('opens on the mode menu with the sketched board', async ({ page }) => {
+  test('opens on the menu with the sketched square board', async ({ page }) => {
     await page.goto('/');
     await expect(page.locator('#home')).toBeVisible();
+    await expect(page.locator('.world')).toHaveText([/Triangle/, /Carreau/, /Ruche/]);
     await expect(page.locator('.mode')).toHaveText([/Rush/, /Levels/, /Memory/, /Zen/]);
-    expect(await readBoard(page, '#board')).toEqual(SKETCH);
+    await expect(page.locator('#board')).toHaveAttribute('data-world', 'square');
+    expect(await boardState(page)).toEqual(SKETCH);
+    await expect(page.locator('#board .piece')).toHaveCount(4);
   });
 
-  test('swipes reshape the pair on the side where they start', async ({ page }) => {
+  test('square swipes reshape the pair on the side where they start', async ({ page }) => {
     await page.goto('/');
-    await swipe(page, .5, .25, 80, 0);          // ⇄ in the top half
-    let s = await readBoard(page, '#board');
-    expect(s.tl).toEqual({ w: 2, h: 2 });       // rectangle vertical → carreau grand
-    expect(s.tr).toEqual({ w: 1, h: 2 });
-    expect(s.bl).toEqual(SKETCH.bl);
-    await swipe(page, .75, .5, 0, -80);         // ⇅ in the right half
-    s = await readBoard(page, '#board');
-    expect(s.tr).toEqual({ w: 1, h: 1 });
-    expect(s.br).toEqual({ w: 2, h: 2 });
-    await swipe(page, .5, .75, 6, 4);           // too short to count
-    expect(await readBoard(page, '#board')).toEqual(s);
+    await swipe(page, .5, .3, 80, 0);           // ⇄ in the top half: widths of the top pair
+    let s = await boardState(page);
+    expect(s[0]).toEqual([2, 2]);               // rectangle vertical → carreau grand
+    expect(s[1]).toEqual([1, 2]);               // carreau grand → rectangle vertical
+    expect(s[3]).toEqual(SKETCH[3]);
+    await swipe(page, .7, .5, 0, -80);          // ⇅ in the right half: heights of the right pair
+    s = await boardState(page);
+    expect(s[1]).toEqual([1, 1]);
+    expect(s[2]).toEqual([2, 2]);
+    await swipe(page, .5, .7, 6, 4);            // too short to count
+    expect(await boardState(page)).toEqual(s);
   });
 
-  test('edge arrows work like swipes', async ({ page }) => {
+  test('side arrows work like swipes', async ({ page }) => {
     await page.goto('/');
-    await page.locator('.edge.bottom').click();
-    expect((await readBoard(page, '#board')).bl).toEqual({ w: 2, h: 1 }); // carreau → rectangle horizontal
-    await page.locator('.edge.left').click();
-    expect((await readBoard(page, '#board')).bl).toEqual({ w: 2, h: 2 });
+    await page.locator(`#board .edge[data-side="${BOTTOM}"]`).click();
+    expect((await boardState(page))[3]).toEqual([2, 1]); // carreau → rectangle horizontal
+    await page.locator(`#board .edge[data-side="${LEFT}"]`).click();
+    expect((await boardState(page))[3]).toEqual([2, 2]);
+  });
+
+  test('arrow keys work the square sides', async ({ page }) => {
+    await page.goto('/');
+    await page.keyboard.press('ArrowUp');
+    expect(await boardState(page)).toEqual([[2, 2], [1, 2], [1, 2], [1, 1]]);
   });
 
   test('sound and vibration toggles are remembered', async ({ page }) => {
@@ -62,11 +73,75 @@ test.describe('home and controls', () => {
     await expect.poll(() => page.evaluate(() => window.__buzz.length)).toBe(1);
     await page.locator('#vibeBtn').click();               // off (the toggle itself buzzes once as feedback)
     const after = await page.evaluate(() => window.__buzz.length);
-    await expect(page.locator('#hud .cur.enter')).toBeVisible();
     await page.waitForTimeout(400);
     await solve(page);
     await page.waitForTimeout(100);
     expect(await page.evaluate(() => window.__buzz.length)).toBe(after);
+  });
+});
+
+test.describe('worlds', () => {
+  for (const [id, sides] of [['tri', 3], ['hex', 6]]) {
+    test(`${id}: has ${sides} corners, swipes along each side, and is remembered`, async ({ page }) => {
+      await page.goto('/');
+      await chooseWorld(page, id);
+      await expect(page.locator('#board .piece')).toHaveCount(sides);
+      await expect(page.locator('#board .edge')).toHaveCount(sides);
+      // Swipe along every side, starting on its half, and check that side changed.
+      for (let s = 0; s < sides; s++) {
+        const before = await boardState(page);
+        const geo = await page.evaluate(([w, side]) => {
+          const v = window.CarreauCore.vertices(w), A = v[side], B = v[(side + 1) % v.length];
+          return { A, B, R: Math.max(...v.map(p => Math.hypot(p[0], p[1]))) };
+        }, [id, s]);
+        const box = await page.locator('#board').boundingBox();
+        const [vx, vy, vw, vh] = (await page.getAttribute('#board', 'viewBox')).split(' ').map(Number);
+        const vb = { x: vx, y: vy, width: vw, height: vh };
+        const toPx = ([x, y]) => [box.x + (x - vb.x) / vb.width * box.width, box.y + (y - vb.y) / vb.height * box.height];
+        const mid = [(geo.A[0] + geo.B[0]) / 2 * .5, (geo.A[1] + geo.B[1]) / 2 * .5];
+        const [sx, sy] = toPx(mid);
+        const len = Math.hypot(geo.B[0] - geo.A[0], geo.B[1] - geo.A[1]);
+        const dir = [(geo.B[0] - geo.A[0]) / len * 60, (geo.B[1] - geo.A[1]) / len * 60];
+        await page.mouse.move(sx, sy); await page.mouse.down();
+        await page.mouse.move(sx + dir[0], sy + dir[1]); await page.mouse.up();
+        const after = await boardState(page);
+        const expected = await page.evaluate(([st, side]) => window.CarreauCore.apply(st, side), [before, s]);
+        expect(after, `swipe along side ${s}`).toEqual(expected);
+      }
+      await page.reload();
+      await expect(page.locator('#board')).toHaveAttribute('data-world', id);
+      await expect(page.locator(`.world[data-world=${id}]`)).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    test(`${id}: levels have their own progress`, async ({ page }) => {
+      await page.goto('/');
+      await chooseWorld(page, id);
+      await page.locator('[data-mode=levels]').click();
+      await expect(page.locator('#lvlTitle')).toHaveText(id === 'tri' ? 'Triangle levels' : 'Ruche levels');
+      await page.locator('.lvl').nth(0).click();
+      await solve(page);
+      await expect(page.locator('#resTitle')).toHaveText('Level 1 cleared');
+      await page.locator('#resMain').click();
+      await expect(page.locator('#v0')).toHaveText('2');
+      await page.locator('#quit').click();
+      await expect(page.locator('.lvl').nth(1)).toBeEnabled();
+      await page.locator('[data-home]').click();
+      await expect(page.locator(`.world[data-world=${id}] em`)).toHaveText('★ 3');
+      await expect(page.locator('.world[data-world=square] em')).toHaveText('★ 0');
+    });
+  }
+
+  test('hex Rush plays with up to 5-move targets', async ({ page }) => {
+    await page.clock.install();
+    await page.goto('/');
+    await chooseWorld(page, 'hex');
+    await page.locator('[data-mode=rush]').click();
+    for (let i = 0; i < 10; i++) {
+      const path = await solve(page);
+      expect(path.length).toBeLessThanOrEqual(5);
+      await page.clock.runFor(400);
+    }
+    await expect(page.locator('#v0')).toHaveText('10');
   });
 });
 
@@ -91,6 +166,44 @@ test.describe('Rush', () => {
     await page.locator('#resAlt').click();
     await expect(page.locator('#bestRush')).toHaveText('Best 3');
   });
+
+  test('pauses: the clock stops and the board ignores swipes', async ({ page }) => {
+    await page.clock.install();
+    await page.goto('/');
+    await page.locator('[data-mode=rush]').click();
+    await page.clock.runFor(5_000);
+    await page.locator('#pause').click();
+    await expect(page.locator('#paused')).toBeVisible();
+    const time = await page.locator('#v2').textContent();
+    const board = await boardState(page);
+    await page.clock.runFor(30_000);
+    await page.keyboard.press('1');
+    expect(await boardState(page)).toEqual(board);
+    await page.locator('#resume').click();
+    await expect(page.locator('#hud')).toBeVisible();
+    await expect(page.locator('#v2')).toHaveText(time);
+    await page.clock.runFor(2_000);
+    expect(Number(await page.locator('#v2').textContent())).toBeLessThan(Number(time));
+  });
+
+  test('leaving the app pauses the game', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('[data-mode=rush]').click();
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'hidden', { value: true, configurable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await expect(page.locator('#paused')).toBeVisible();
+  });
+
+  test('Esc (Android back) pauses, then quits to the menu', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('[data-mode=rush]').click();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#paused')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#home')).toBeVisible();
+  });
 });
 
 test.describe('Zen', () => {
@@ -98,6 +211,7 @@ test.describe('Zen', () => {
     await page.goto('/');
     await page.locator('[data-mode=zen]').click();
     await expect(page.locator('#bar')).toBeHidden();
+    await expect(page.locator('#pause')).toBeHidden();
     for (let i = 0; i < 2; i++) {
       await solve(page);
       await expect(page.locator('#v0')).toHaveText(String(i + 1));
@@ -114,31 +228,41 @@ test.describe('Memory', () => {
     await page.goto('/');
     await page.locator('[data-mode=memory]').click();
 
-    // Round 1: remember the shape, then rebuild it.
+    // Round 1: input is locked while memorizing; then rebuild the shape.
     let target = await currentTarget(page);
-    const firstMove = page.keyboard.press('ArrowUp'); // input is locked while memorizing
-    await firstMove;
-    expect(await readBoard(page, '#board')).toEqual(SKETCH);
+    await page.keyboard.press('1');
+    expect(await boardState(page)).toEqual(SKETCH);
     await page.clock.runFor(2_000);
     await expect(page.locator('#targets .cur')).toHaveClass(/veil/);
     await press(page, await pathTo(page, target));
     await expect(page.locator('#v0')).toHaveText('1');
     await page.clock.runFor(700);
 
-    // Rounds 2–4: deliberately miss until out of lives.
+    // Then miss until out of lives: exactly as many moves as needed, never the right set.
     for (let lives = 2; lives >= 0; lives--) {
       target = await currentTarget(page);
       const right = await pathTo(page, target);
       await page.clock.runFor(2_000);
-      // Exactly as many moves as needed, but never the right set: repeat one edge the target doesn't use.
-      const all = ['top', 'bottom', 'left', 'right'];
-      const w = all.find(e => !right.includes(e)) ?? right[0];
-      await press(page, Array(right.length).fill(w));
+      const wrong = [0, 1, 2, 3].find(e => !right.includes(e)) ?? right[0];
+      await press(page, Array(right.length).fill(wrong));
       await expect(page.locator('#v1')).toHaveText('♥'.repeat(lives) + '♡'.repeat(3 - lives));
       await page.clock.runFor(1_500);
     }
     await expect(page.locator('#result')).toBeVisible();
     await expect(page.locator('#resText')).toContainText('1 shapes rebuilt');
+  });
+
+  test('pausing while memorizing gives the full viewing time back', async ({ page }) => {
+    await page.clock.install();
+    await page.goto('/');
+    await page.locator('[data-mode=memory]').click();
+    await page.clock.runFor(1_000);
+    await page.locator('#pause').click();
+    await page.clock.runFor(10_000);
+    await page.locator('#resume').click();
+    await expect(page.locator('#targets .cur')).not.toHaveClass(/veil/);
+    await page.clock.runFor(1_000);
+    await expect(page.locator('#targets .cur')).toHaveClass(/veil/);
   });
 });
 
@@ -146,13 +270,14 @@ test.describe('Levels', () => {
   test('clears levels in order, earns stars and unlocks the next', async ({ page }) => {
     await page.goto('/');
     await page.locator('[data-mode=levels]').click();
+    await expect(page.locator('#lvlTitle')).toHaveText('Carreau levels');
     await expect(page.locator('.lvl').nth(0)).toBeEnabled();
     await expect(page.locator('.lvl').nth(1)).toBeDisabled();
     await page.locator('.lvl').nth(0).click();
 
     for (let n = 1; n <= 9; n++) {
       await expect(page.locator('#v0')).toHaveText(String(n));
-      const targets = await page.locator('#targets .board').count();
+      const targets = await page.locator('#targets .mini').count();
       expect(targets).toBe(n <= 8 ? 1 : 2);
       for (let t = 0; t < targets; t++) await solve(page);
       await expect(page.locator('#resTitle')).toHaveText(`Level ${n} cleared`);
@@ -170,7 +295,7 @@ test.describe('Levels', () => {
     await page.locator('[data-mode=levels]').click();
     await page.locator('.lvl').nth(0).click();
     const right = await pathTo(page, await currentTarget(page));
-    const wrong = ['top', 'bottom', 'left', 'right'].find(e => !right.includes(e));
+    const wrong = [0, 1, 2, 3].find(e => !right.includes(e));
     const budget = Number((await page.locator('#v2').textContent()).split('/')[1]);
     await press(page, Array(budget).fill(wrong));
     await expect(page.locator('#resTitle')).toHaveText('Out of moves.');
@@ -184,11 +309,23 @@ test.describe('Levels', () => {
       await page.locator('[data-mode=levels]').click();
       await page.locator('.lvl').nth(0).click();
       const right = await pathTo(page, await currentTarget(page));
-      const wrong = ['top', 'bottom', 'left', 'right'].find(e => !right.includes(e));
+      const wrong = [0, 1, 2, 3].find(e => !right.includes(e));
       await press(page, [...Array(detours * 2).fill(wrong), ...right]);
       await expect(page.locator('#resTitle')).toHaveText('Level 1 cleared');
       const lit = await page.locator('#resStars').evaluate(el => el.firstChild.textContent);
       expect(lit).toBe('★'.repeat(earned));
     });
   }
+
+  test('keeps square progress saved before worlds existed', async ({ page }) => {
+    await page.addInitScript(() => {
+      if (!localStorage.getItem('carreau-progress')) {
+        localStorage.setItem('carreau-levels', JSON.stringify({ 1: 3, 2: 2 }));
+        localStorage.setItem('carreau-bests', JSON.stringify({ rush: 7, memory: 2, zen: 4 }));
+      }
+    });
+    await page.goto('/');
+    await expect(page.locator('#bestRush')).toHaveText('Best 7');
+    await expect(page.locator('#bestLevels')).toHaveText('★ 5 / 90');
+  });
 });

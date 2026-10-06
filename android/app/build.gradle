@@ -7,8 +7,10 @@ android {
         applicationId "com.ghorbel.carreau"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        // CI passes its run number, so every build installs over the previous one.
+        def build = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInteger()
+        versionCode build
+        versionName "1.1.${build}"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,8 +18,22 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        // A fixed key for test builds you install by hand, so updates keep your progress.
+        // It is public on purpose: make a private key before publishing to the Play Store.
+        test {
+            storeFile file("carreau-test.keystore")
+            storePassword "carreau-test"
+            keyAlias "carreau"
+            keyPassword "carreau-test"
+        }
+    }
     buildTypes {
+        debug {
+            signingConfig signingConfigs.test
+        }
         release {
+            signingConfig signingConfigs.test
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

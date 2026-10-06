@@ -1,34 +1,23 @@
 const { expect } = require('@playwright/test');
 
-const KEY = { top: 'ArrowUp', bottom: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' };
-
-// Read a board's shape from the rendered pieces (2 units = 40% of the board).
-async function readBoard(page, selector) {
-  return page.$eval(selector, el => {
-    const s = {};
-    for (const c of ['tl', 'tr', 'bl', 'br']) {
-      const p = el.querySelector('.piece.' + c);
-      s[c] = { w: p.style.width.includes('40%') ? 2 : 1, h: p.style.height.includes('40%') ? 2 : 1 };
-    }
-    return s;
-  });
-}
-
-const currentTarget = page => readBoard(page, '#targets .cur');
+// Boards expose their logical state (pieces as [a, b] lengths) on data-state.
+const readState = (page, selector) => page.$eval(selector, el => JSON.parse(el.dataset.state));
+const boardState = page => readState(page, '#board');
+const currentTarget = page => readState(page, '#targets .cur svg');
 
 async function pathTo(page, target) {
-  const board = await readBoard(page, '#board');
+  const board = await boardState(page);
   return page.evaluate(([a, b]) => window.CarreauCore.edgesBetween(a, b), [board, target]);
 }
 
-async function press(page, edges) {
-  for (const e of edges) await page.keyboard.press(KEY[e]);
+// Number keys work side 1, 2, 3…
+async function press(page, sides) {
+  for (const s of sides) await page.keyboard.press(String(s + 1));
 }
 
 // Swipe the current target in the fewest moves.
 async function solve(page) {
-  const target = await currentTarget(page);
-  const path = await pathTo(page, target);
+  const path = await pathTo(page, await currentTarget(page));
   expect(path, 'target is reachable').not.toBeNull();
   await press(page, path);
   return path;
@@ -45,10 +34,15 @@ async function swipe(page, fx, fy, dx, dy) {
   await page.mouse.up();
 }
 
+async function chooseWorld(page, id) {
+  await page.locator(`.world[data-world=${id}]`).click();
+  await expect(page.locator('#board')).toHaveAttribute('data-world', id);
+}
+
 function trackErrors(page) {
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   return errors;
 }
 
-module.exports = { KEY, readBoard, currentTarget, pathTo, press, solve, swipe, trackErrors };
+module.exports = { readState, boardState, currentTarget, pathTo, press, solve, swipe, chooseWorld, trackErrors };
