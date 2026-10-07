@@ -103,6 +103,26 @@
   // One wasted swipe always costs two moves (it has to be undone), so ★★ allows one detour.
   const starsFor = (moves, optimal) => moves <= optimal ? 3 : moves <= optimal + 2 ? 2 : 1;
 
+  // ---------- Gates ----------
+  // Walls with holes in the target's shape fly at the board. Wall n (0-based) changes k sides of the
+  // previous wall's shape and takes `travel` seconds to arrive; both tighten as the run goes on.
+  function gateWall(n, sides, rnd = Math.random) {
+    const cap = Math.min(sides, 4 + (sides > 4 && n >= 30));
+    const lo = n < 10 ? 1 : 2;
+    const hi = Math.min(cap, n < 4 ? 1 : n < 10 ? 2 : n < 20 ? 3 : cap);
+    const k = Math.max(1, Math.min(lo, hi) + Math.floor(rnd() * (hi - Math.min(lo, hi) + 1)));
+    const travel = Math.max(1.6, 4.5 - n * .1) + (k - 1) * .35; // extra time for each extra swipe
+    return { k, travel: Math.round(travel * 100) / 100 };
+  }
+  // Points for a cleared wall: base 100, plus up to 100 for clearing it early, plus 50 with no wasted
+  // swipe, all times the combo (walls cleared in a row, this one included, capped at 10).
+  function gateScore(combo, earlyFraction, perfect) {
+    const early = Math.round(Math.max(0, Math.min(1, earlyFraction)) * 100);
+    return (100 + early + (perfect ? 50 : 0)) * Math.min(Math.max(1, combo), 10);
+  }
+  // Apparent size of a wall that is a fraction p of the way to the board (perspective: size ∝ 1 / distance).
+  const gateScale = p => 1 / (1 + 3 * (1 - Math.max(0, Math.min(1, p))));
+
   // ---------- Geometry ----------
   // Vertices of a world's polygon with side length = units, centred on 0,0 (y down).
   function vertices(worldId) {
@@ -150,5 +170,6 @@
   return {
     WORLDS, WORLD_ORDER, LEVEL_COUNT, world, initial, clone, same, apply, edgesBetween,
     randomEdges, seeded, levelDef, starsFor, vertices, piecePolygon, sideForSwipe,
+    gateWall, gateScore, gateScale,
   };
 });

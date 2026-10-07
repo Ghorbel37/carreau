@@ -14,7 +14,7 @@ test.describe('home and controls', () => {
     await page.goto('/');
     await expect(page.locator('#home')).toBeVisible();
     await expect(page.locator('.world')).toHaveText([/Triangle/, /Carreau/, /Ruche/]);
-    await expect(page.locator('.mode')).toHaveText([/Rush/, /Levels/, /Memory/, /Zen/]);
+    await expect(page.locator('.mode')).toHaveText([/Gates/, /Rush/, /Levels/, /Memory/, /Zen/]);
     await expect(page.locator('#board')).toHaveAttribute('data-world', 'square');
     expect(await boardState(page)).toEqual(SKETCH);
     await expect(page.locator('#board .piece')).toHaveCount(4);
@@ -143,6 +143,85 @@ test.describe('worlds', () => {
     }
     await expect(page.locator('#v0')).toHaveText('10');
   });
+});
+
+test.describe('Gates', () => {
+  test('clearing walls scores, builds a combo and swaps in the next wall', async ({ page }) => {
+    await page.clock.install();
+    await page.goto('/');
+    await page.locator('[data-mode=gates]').click();
+    await expect(page.locator('#hud')).toBeVisible();
+    await expect(page.locator('#targets .mini')).toHaveCount(2);
+    const next = await page.$eval('#targets .next svg', el => el.dataset.state);
+    await page.clock.runFor(500);
+    await solve(page);
+    await expect(page.locator('#v1')).toHaveText('×1');
+    const first = Number(await page.locator('#v0').textContent());
+    expect(first).toBeGreaterThan(150); // early and clean
+    await page.clock.runFor(600);
+    expect(await page.$eval('#targets .cur svg', el => el.dataset.state)).toBe(next);
+    await solve(page);
+    await expect(page.locator('#v1')).toHaveText('×2');
+    expect(Number(await page.locator('#v0').textContent())).toBeGreaterThan(first * 2);
+  });
+
+  test('pieces that fit their hole are marked', async ({ page }) => {
+    await page.clock.install();
+    await page.goto('/');
+    await page.locator('[data-mode=gates]').click();
+    const target = await currentTarget(page);
+    const board = await boardState(page);
+    const fits = target.map((p, i) => p[0] === board[i][0] && p[1] === board[i][1]);
+    const marked = await page.$$eval('#board .piece', ps => ps.map(p => p.classList.contains('fit')));
+    expect(marked).toEqual(fits);
+  });
+
+  test('a wall that hits the wrong shape costs a life; three crashes end the run', async ({ page }) => {
+    await page.clock.install();
+    await page.goto('/');
+    await page.locator('[data-mode=gates]').click();
+    for (const hearts of ['♥♥♡', '♥♡♡']) {
+      await page.clock.runFor(6_000);
+      await expect(page.locator('#v2')).toHaveText(hearts);
+      await expect(page.locator('#v1')).toHaveText('×1');
+      await page.clock.runFor(1_000);
+    }
+    await page.clock.runFor(7_000);
+    await expect(page.locator('#result')).toBeVisible();
+    await expect(page.locator('#resTitle')).toHaveText("Crashed out.");
+    await page.locator('#resAlt').click();
+    await expect(page.locator('#bestGates')).toHaveText('New');
+  });
+
+  test('pausing freezes the wall', async ({ page }) => {
+    await page.clock.install();
+    await page.goto('/');
+    await page.locator('[data-mode=gates]').click();
+    await page.clock.runFor(1_000);
+    await page.locator('#pause').click();
+    await page.clock.runFor(20_000);
+    await page.locator('#resume').click();
+    await expect(page.locator('#v2')).toHaveText('♥♥♥');
+    await page.clock.runFor(6_000);
+    await expect(page.locator('#v2')).toHaveText('♥♥♡');
+  });
+
+  for (const id of ['tri', 'hex']) {
+    test(`${id}: walls work in this world too`, async ({ page }) => {
+      await page.clock.install();
+      await page.goto('/');
+      await chooseWorld(page, id);
+      await page.locator('[data-mode=gates]').click();
+      for (let i = 0; i < 5; i++) {
+        await solve(page);
+        await page.clock.runFor(600);
+      }
+      await expect(page.locator('#v1')).toHaveText('×5');
+      await page.locator('#quit').click();
+      await expect(page.locator('#home')).toBeVisible();
+      await expect(page.locator('#board .wall')).toHaveAttribute('visibility', 'hidden');
+    });
+  }
 });
 
 test.describe('Rush', () => {

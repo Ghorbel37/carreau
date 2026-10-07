@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const core = require('../../www/core.js');
 
 const {
+  gateWall, gateScore, gateScale,
   WORLDS, WORLD_ORDER, LEVEL_COUNT, initial, clone, same, apply, edgesBetween,
   randomEdges, seeded, levelDef, starsFor, vertices, piecePolygon, sideForSwipe,
 } = core;
@@ -158,4 +159,37 @@ test('stars: 3 for fewest moves, 2 for one detour (two extra moves), else 1', ()
   assert.equal(starsFor(3, 3), 3);
   assert.equal(starsFor(5, 3), 2);
   assert.equal(starsFor(7, 3), 1);
+});
+
+test('gates: walls start gentle, tighten, and never ask for more sides than the board has', () => {
+  for (const id of WORLD_ORDER) {
+    const n = WORLDS[id].sides;
+    let lastFloor = Infinity;
+    for (let w = 0; w < 80; w++) {
+      for (const r of [0, .5, .999]) {
+        const { k, travel } = gateWall(w, n, () => r);
+        assert.ok(k >= 1 && k <= Math.min(n, 5), `${id} wall ${w} k=${k}`);
+        assert.ok(travel >= 1.6 && travel <= 6, `${id} wall ${w} travel=${travel}`);
+        if (w < 4) assert.equal(k, 1);
+      }
+      const floor = gateWall(w, n, () => 0).travel - (gateWall(w, n, () => 0).k - 1) * .35;
+      assert.ok(floor <= lastFloor + 1e-9, 'walls never slow down');
+      lastFloor = floor;
+    }
+  }
+});
+
+test('gates: score rewards early, clean clears and combos up to ×10', () => {
+  assert.equal(gateScore(1, 0, false), 100);
+  assert.equal(gateScore(1, .5, false), 150);
+  assert.equal(gateScore(1, 1, true), 250);
+  assert.equal(gateScore(3, .5, true), 600);
+  assert.equal(gateScore(25, 0, false), 1000);
+});
+
+test('gates: a wall looks a quarter size far away and full size on arrival', () => {
+  assert.equal(gateScale(0), .25);
+  assert.equal(gateScale(1), 1);
+  assert.ok(gateScale(.5) > .25 && gateScale(.5) < 1);
+  assert.ok(gateScale(.9) - gateScale(.8) > gateScale(.2) - gateScale(.1), 'it speeds up as it gets close');
 });

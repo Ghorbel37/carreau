@@ -2,8 +2,10 @@
   // ---------- Rules (core.js) ----------
   const {
     WORLDS, WORLD_ORDER, LEVEL_COUNT, world, initial, clone, same, apply, randomEdges,
-    levelDef, starsFor, vertices, piecePolygon, sideForSwipe,
+    levelDef, starsFor, vertices, piecePolygon, sideForSwipe, edgesBetween, gateWall, gateScore, gateScale,
   } = window.CarreauCore;
+  // Modes with a clock: they pause when you leave the app.
+  const timed = mode => mode === 'rush' || mode === 'memory' || mode === 'gates';
   const RUSH_TIME = 60;
   const HINTS = {
     tri: 'swipe along a side to resize its two corners',
@@ -35,7 +37,7 @@
     WORLD_ORDER.forEach(w => {
       p[w] = p[w] || {};
       p[w].stars = p[w].stars || {};
-      p[w].best = Object.assign({ rush: 0, memory: 0, zen: 0 }, p[w].best);
+      p[w].best = Object.assign({ gates: 0, rush: 0, memory: 0, zen: 0 }, p[w].best);
     });
     return p;
   })();
@@ -60,6 +62,23 @@
       } catch (e) { return null; }
     },
     suspend() { try { if (this.ctx && this.ctx.state === 'running') this.ctx.suspend(); } catch (e) {} },
+    noise(at, dur, f0, f1, vol) {
+      const c = this.ctx;
+      if (!this.noiseBuf) {
+        this.noiseBuf = c.createBuffer(1, Math.floor(c.sampleRate * .6), c.sampleRate);
+        const d = this.noiseBuf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      }
+      const src = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+      src.buffer = this.noiseBuf;
+      f.type = 'bandpass'; f.Q.value = 1.2;
+      f.frequency.setValueAtTime(f0, at); f.frequency.exponentialRampToValueAtTime(f1, at + dur);
+      g.gain.setValueAtTime(.0001, at);
+      g.gain.exponentialRampToValueAtTime(vol, at + dur * .3);
+      g.gain.exponentialRampToValueAtTime(.0001, at + dur);
+      src.connect(f); f.connect(g); g.connect(this.out);
+      src.start(at); src.stop(at + dur + .05);
+    },
     tone(f, at, dur, type, vol) {
       const c = this.ctx, o = c.createOscillator(), g = c.createGain();
       o.type = type; o.frequency.setValueAtTime(f, at);
@@ -86,6 +105,9 @@
         case 'clear': arp([523.25, 659.25, 783.99, 1046.5, 1318.5], .08, .4, 'triangle', .12); break;
         case 'fail': this.tone(220, t, .16, 'square', .045); this.tone(165, t + .13, .26, 'square', .045); break;
         case 'tick': this.tone(1200, t, .04, 'square', .035); break;
+        // Gates: the chime climbs a semitone with every wall in the combo.
+        case 'pass': { const up = Math.pow(2, Math.min(arg || 1, 12) / 12); arp([523.25, 659.25, 783.99].map(f => f * up), .045, .2, 'sine', .14); this.noise(t, .35, 400, 2600, .22); break; }
+        case 'crash': this.noise(t, .5, 900, 110, .4); this.tone(98, t, .32, 'square', .06); break;
       }
     },
   };
@@ -126,6 +148,12 @@
       const size = Math.max(maxX - minX, maxY - minY), cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
       svg.setAttribute('viewBox', `${(cx - size / 2).toFixed(3)} ${(cy - size / 2).toFixed(3)} ${size.toFixed(3)} ${size.toFixed(3)}`);
       svgEl('polygon', { class: 'outline', points: pts(verts) }, svg);
+      if (this.opts.arrows) {
+        // Gates: a wall with holes in the target's shape, drawn under the pieces.
+        this.wallG = svgEl('g', { class: 'wall', visibility: 'hidden' }, svg);
+        this.wallPanel = svgEl('path', { class: 'panel', 'fill-rule': 'evenodd' }, this.wallG);
+        this.wallHoles = svgEl('path', { class: 'holes' }, this.wallG);
+      }
       this.pieces = verts.map(() => svgEl('polygon', { class: 'piece' }, svg));
       this.edges = [];
       if (this.opts.arrows) {
@@ -179,6 +207,28 @@
       }
       this.draw();
       this.raf = moving ? requestAnimationFrame(tt => this.step(tt)) : 0;
+    }
+    setWall(target) {
+      if (!this.wallG) return;
+      if (!target) { this.wallG.setAttribute('visibility', 'hidden'); return; }
+      const R = Math.hypot(this.verts[0][0], this.verts[0][1]), k = (R + .75) / R;
+      const path = poly => 'M' + poly.map(p => p[0].toFixed(3) + ' ' + p[1].toFixed(3)).join('L') + 'Z';
+      const holes = target.map(([a, b], i) => path(piecePolygon(this.verts, i, a, b))).join('');
+      this.wallPanel.setAttribute('d', path(this.verts.map(([x, y]) => [x * k, y * k])) + holes);
+      this.wallHoles.setAttribute('d', holes);
+      this.wallG.setAttribute('class', 'wall');
+      this.wallG.setAttribute('visibility', 'visible');
+      this.wallTarget = target;
+    }
+    setWallView(scale, opacity, cls) {
+      if (!this.wallG) return;
+      this.wallG.setAttribute('transform', `scale(${scale.toFixed(4)})`);
+      this.wallG.style.opacity = opacity.toFixed(3);
+      if (cls !== undefined) this.wallG.setAttribute('class', 'wall ' + cls);
+    }
+    // Outline in green each piece that already fits its hole.
+    markFit(target) {
+      this.pieces.forEach((p, i) => p.classList.toggle('fit', !!target && target[i][0] === this.target[i][0] && target[i][1] === this.target[i][1]));
     }
     draw() {
       this.pieces.forEach((p, i) => p.setAttribute('points', pts(piecePolygon(this.verts, i, this.cur[i][0], this.cur[i][1]))));
@@ -245,7 +295,12 @@
     g.timers.add(t);
     arm();
   }
-  function stopGame() { if (G) G.timers.forEach(t => clearTimeout(t.id)); G = null; }
+  function stopGame() {
+    if (G) G.timers.forEach(t => clearTimeout(t.id));
+    G = null;
+    mainView.setWall(null);
+    mainView.markFit(null);
+  }
 
   function setBoard(worldId, s) {
     state = clone(s);
@@ -260,7 +315,7 @@
     boardEl.classList.remove('win', 'miss');
     audio.ensure();
     show('hud');
-    $('pause').hidden = !(mode === 'rush' || mode === 'memory');
+    $('pause').hidden = !timed(mode);
     if (mode === 'level') {
       G.level = level;
       G.def = levelDef(w, level);
@@ -271,6 +326,7 @@
       say(G.def.targets.length > 1 ? `level ${level} · ${G.def.targets.length} targets in order` : `level ${level}`);
     } else {
       setBoard(w, initial(w));
+      if (mode === 'gates') { startGates(); return; }
       if (mode === 'memory') G.lives = 3;
       if (mode === 'rush') { G.time = RUSH_TIME; G.lastSec = RUSH_TIME; }
       nextRound();
@@ -278,6 +334,101 @@
       if (mode === 'zen') say('take your time');
     }
     updateHud();
+  }
+
+  // ---------- Gates ----------
+  function startGates() {
+    Object.assign(G, { lives: 3, combo: 0, bestCombo: 0, walls: 0, cleared: 0, queue: [], chain: clone(state) });
+    queueWall(); queueWall();
+    spawnWall();
+    G.last = performance.now();
+    requestAnimationFrame(gatesTick);
+    say('fit the shape before the wall hits');
+  }
+  // Walls are made in a chain, each a few swipes from the one before.
+  function queueWall() {
+    const spec = gateWall(G.walls + G.queue.length, G.sides);
+    const t = clone(G.chain);
+    randomEdges(spec.k, G.sides).forEach(e => apply(t, e));
+    G.chain = t;
+    G.queue.push({ target: t, travel: spec.travel });
+  }
+  function spawnWall() {
+    const wall = G.queue.shift();
+    queueWall();
+    // After a crash the board can already match; then the wall gets one more side.
+    if (same(state, wall.target)) apply(wall.target, randomEdges(1, G.sides)[0]);
+    G.wall = wall; G.target = wall.target;
+    G.optimal = edgesBetween(state, wall.target).length;
+    G.moves = 0; G.p = 0; G.phase = 'approach'; G.warned = false;
+    mainView.setWall(wall.target);
+    mainView.setWallView(gateScale(0), .25, '');
+    mainView.markFit(wall.target);
+    const box = $('targets');
+    box.innerHTML = '';
+    box.appendChild(miniBoard(G.world, wall.target, 'cur enter'));
+    box.appendChild(miniBoard(G.world, G.queue[0].target, 'sm next'));
+    updateHud();
+  }
+  function gatesTick(t) {
+    if (!G || G.mode !== 'gates' || G.paused) return;
+    const dt = Math.min(.1, Math.max(0, (t - G.last) / 1000));
+    G.last = t;
+    if (G.phase === 'approach') {
+      G.p += dt / G.wall.travel;
+      if (G.p >= 1) { G.p = 1; crash(); }
+      else {
+        const danger = G.p > .75;
+        if (danger && !G.warned) { G.warned = true; audio.play('tick'); }
+        mainView.setWallView(gateScale(G.p), .25 + .6 * G.p, danger ? 'danger' : '');
+      }
+    } else if (G.phase === 'swoosh') {
+      G.sw = Math.min(1, G.sw + dt / .32);
+      const e = G.sw * G.sw;
+      mainView.setWallView(G.swFrom + (1.8 - G.swFrom) * e, (1 - G.sw) * .8, 'passed');
+      if (G.sw >= 1) { G.locked = false; spawnWall(); }
+    }
+    if (G) { updateHud(); requestAnimationFrame(gatesTick); }
+  }
+  function gatesMove() {
+    mainView.markFit(G.target);
+    if (G.phase === 'approach' && same(state, G.target)) passWall();
+    updateHud();
+  }
+  function passWall() {
+    G.combo++; G.cleared++; G.walls++;
+    G.bestCombo = Math.max(G.bestCombo, G.combo);
+    const perfect = G.moves === G.optimal;
+    if (perfect) G.perfect++;
+    const pts = gateScore(G.combo, 1 - G.p, perfect);
+    G.score += pts;
+    bump(0); bump(1);
+    let msg = `+${pts}` + (G.combo > 1 ? ` · combo ×${Math.min(G.combo, 10)}` : '') + (perfect ? ' · clean' : '');
+    if (G.cleared % 15 === 0 && G.lives < 3) { G.lives++; bump(2); msg += ' · +1 life'; }
+    say(msg, 'good');
+    restart(boardEl, 'pop');
+    boardEl.classList.add('win');
+    setTimeout(() => boardEl.classList.remove('win'), 380);
+    audio.play('pass', G.combo);
+    haptic(perfect ? 'perfect' : 'match');
+    G.phase = 'swoosh'; G.sw = 0; G.swFrom = gateScale(G.p); G.locked = true;
+  }
+  function crash() {
+    G.phase = 'crash'; G.lives--; G.combo = 0; G.walls++;
+    G.locked = true;
+    mainView.setWallView(1, .9, 'hit');
+    bump(2);
+    say(G.lives > 0 ? 'crash! the wall hit' : 'crash! out of lives', 'bad');
+    restart(boardEl, 'shake');
+    boardEl.classList.add('miss');
+    setTimeout(() => boardEl.classList.remove('miss'), 700);
+    audio.play('crash');
+    haptic('fail');
+    later(() => {
+      if (G.lives <= 0) return finish();
+      G.locked = false;
+      spawnWall();
+    }, 900);
   }
 
   function pickK() {
@@ -332,7 +483,7 @@
   }
 
   function pause() {
-    if (!G || G.paused || !(G.mode === 'rush' || G.mode === 'memory')) return;
+    if (!G || G.paused || !timed(G.mode)) return;
     G.paused = true;
     G.pausedAt = performance.now();
     G.timers.forEach(t => { clearTimeout(t.id); t.ms -= G.pausedAt - t.start; });
@@ -350,6 +501,9 @@
     // Re-render the targets panel the way it was.
     if (G.mode === 'memory') {
       if (G.phase === 'show') { say('memorize it…'); memoryBar(); } else say('now rebuild it');
+    } else if (G.mode === 'gates') {
+      say('fit the shape before the wall hits');
+      requestAnimationFrame(gatesTick);
     } else {
       say('match the target');
       requestAnimationFrame(rushTick);
@@ -359,7 +513,11 @@
   function updateHud() {
     if (!G) return;
     const m = G.mode;
-    if (m === 'rush') {
+    if (m === 'gates') {
+      setStats([['Score', G.score], ['Combo', '×' + Math.min(Math.max(G.combo, 1), 10)], ['Lives', '♥'.repeat(Math.max(0, G.lives)) + '♡'.repeat(3 - Math.max(0, G.lives))]]);
+      setBar(1 - G.p, G.p > .75);
+      $('line').textContent = `Wall ${G.walls + (G.phase === 'approach' ? 1 : 0)} · ${G.optimal} swipe${G.optimal === 1 ? '' : 's'}`;
+    } else if (m === 'rush') {
       setStats([['Score', G.score], ['Perfect', G.perfect], ['Time', Math.ceil(G.time)]]);
       setBar(G.time / RUSH_TIME, G.time < 10);
       $('line').textContent = `Moves ${G.moves} · best possible ${G.optimal}`;
@@ -404,6 +562,7 @@
     audio.play('move', side);
     if (!G) return;
     G.moves++;
+    if (G.mode === 'gates') return gatesMove();
     if (G.mode === 'level') levelMove();
     else if (G.mode === 'memory') memoryMove();
     else if (same(state, G.target)) roundWin();
@@ -478,7 +637,14 @@
     let title, text, main, alt;
     const starHtml = k => '★'.repeat(k) + `<span class="dim">${'★'.repeat(3 - k)}</span>`;
     $('resStars').hidden = g.mode !== 'level' || reason !== 'win';
-    if (g.mode === 'rush' || g.mode === 'memory') {
+    if (g.mode === 'gates') {
+      const isBest = g.score > best.gates;
+      if (isBest) { best.gates = g.score; saveProgress(); }
+      title = isBest ? 'New best!' : 'Crashed out.';
+      text = `${g.score} points. ${g.cleared} wall${g.cleared === 1 ? '' : 's'} cleared, best combo ×${Math.min(g.bestCombo, 10)}. Best: ${best.gates}.`;
+      main = ['Play again', () => startGame('gates')];
+      alt = ['Modes', goHome];
+    } else if (g.mode === 'rush' || g.mode === 'memory') {
       const isBest = g.score > best[g.mode];
       if (isBest) { best[g.mode] = g.score; saveProgress(); }
       title = isBest ? 'New best!' : g.mode === 'rush' ? "Time's up." : 'Out of lives.';
@@ -519,7 +685,7 @@
   // Android back button and Esc: step back one screen; on the menu, leave the app.
   function back() {
     if (screen === 'paused') return quit();
-    if (G) { if (G.mode === 'rush' || G.mode === 'memory') pause(); else quit(); return; }
+    if (G) { if (timed(G.mode)) pause(); else quit(); return; }
     if (screen !== 'home') return goHome();
     const app = plugin('App');
     if (app) app.exitApp();
@@ -535,6 +701,7 @@
     });
     const w = settings.world, best = progress[w].best;
     $('worldBlurb').textContent = world(w).blurb;
+    $('bestGates').textContent = best.gates ? `Best ${best.gates}` : 'New';
     $('bestRush').textContent = best.rush ? `Best ${best.rush}` : 'New';
     $('bestLevels').textContent = `★ ${totalStars(w)} / ${LEVEL_COUNT * 3}`;
     $('bestMemory').textContent = best.memory ? `Best ${best.memory}` : 'New';

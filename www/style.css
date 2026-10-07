@@ -99,6 +99,9 @@ button:focus-visible { outline: 3px solid var(--green); outline-offset: 3px; }
   transition: transform .15s;
 }
 .mode:active { transform: scale(.97); }
+.mode.hero { grid-column: 1 / -1; background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.mode.hero span { color: color-mix(in srgb, var(--paper) 78%, var(--ink)); }
+.mode.hero em { color: color-mix(in srgb, var(--green) 55%, var(--paper)); }
 .mode b { font: 700 1.3rem/1.1 var(--display); }
 .mode span { font-size: .78rem; color: var(--ink-soft); line-height: 1.25; }
 .mode em { font-style: normal; font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; color: var(--green); font-variant-numeric: tabular-nums; }
@@ -155,12 +158,25 @@ button:focus-visible { outline: 3px solid var(--green); outline-offset: 3px; }
 .board polygon { vector-effect: non-scaling-stroke; stroke-linejoin: round; }
 .board .outline { fill: color-mix(in srgb, var(--paper) 85%, transparent); stroke: var(--ink); stroke-width: 3px; }
 .board .piece { fill: url(#hatch); stroke: var(--ink); stroke-width: 2.5px; transition: stroke .2s, opacity .2s; }
+.board .piece.fit { stroke: var(--green); }
 .board.win .piece { fill: url(#hatchWin); stroke: var(--green); }
 .board.miss .piece { fill: url(#hatchMiss); stroke: var(--margin); }
 #board.pop { animation: pop .42s cubic-bezier(.34,1.56,.64,1); }
 @keyframes pop { 35% { transform: scale(1.04) rotate(-.6deg); } }
 #board.shake { animation: shake .42s ease-in-out; }
 @keyframes shake { 20% { transform: translateX(-8px); } 40% { transform: translateX(7px); } 60% { transform: translateX(-5px); } 80% { transform: translateX(3px); } }
+
+/* Gates: the approaching wall */
+.wall .panel { fill: var(--ink); fill-opacity: .16; stroke: var(--ink); stroke-width: 2px; vector-effect: non-scaling-stroke; }
+.wall .holes { fill: none; stroke: var(--ink); stroke-width: 2px; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; }
+.wall.danger .panel { fill: var(--margin); fill-opacity: .14; }
+.wall.danger .holes { stroke: var(--margin); }
+.wall.passed .panel { fill: var(--green); fill-opacity: .14; stroke: var(--green); }
+.wall.passed .holes { stroke: var(--green); }
+.wall.hit .panel { fill: var(--margin); fill-opacity: .32; stroke: var(--margin); }
+.wall.hit .holes { stroke: var(--margin); }
+.mini.next { opacity: .55; }
+.mini.next::before { content: "next"; position: absolute; top: -14px; left: 0; right: 0; text-align: center; font-size: .6rem; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-soft); }
 
 .edge { cursor: pointer; outline: none; }
 .edge .hit { fill: transparent; }

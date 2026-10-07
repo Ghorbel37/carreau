@@ -78,7 +78,7 @@ test.describe('offline', () => {
     await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
     await context.setOffline(true);
     await page.reload();
-    await expect(page.locator('.mode')).toHaveCount(4);
+    await expect(page.locator('.mode')).toHaveCount(5);
     await page.locator('[data-mode=zen]').click();
     await solve(page);
     await expect(page.locator('#v0')).toHaveText('1');

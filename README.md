@@ -35,6 +35,7 @@ Keyboard: number keys work side 1, 2, 3…; on the square board the arrow keys a
 
 ## Modes
 
+- **Gates** (the main mode): walls with holes in a target shape fly at the board, growing as they come closer. Reshape the pieces to fit the holes before a wall arrives; a piece is outlined green once it fits its hole, and the next wall's shape is shown beside the current one. A wall cleared early scores more, a clean clear (no wasted swipe) adds a bonus, and clearing walls in a row multiplies the score (up to ×10). A wall that hits the wrong shape costs one of three lives and resets the combo; every 15 walls cleared gives a life back. Walls get faster and need more swipes as the run goes on.
 - **Rush**: match as many target shapes as you can in 60 seconds. A match in the fewest possible moves gives +3 s, any other match +1 s.
 - **Levels**: 30 fixed puzzles with a move limit. From level 9, two or three targets must be hit in order. Fewest moves earns ★★★, one detour (two extra moves) ★★, otherwise ★. Levels 25–30 must be solved perfectly. Clearing a level unlocks the next.
 - **Memory**: the target shows briefly, then hides. Rebuild it in exactly the minimum number of moves. Three lives.
