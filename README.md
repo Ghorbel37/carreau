@@ -82,4 +82,4 @@ Builds are signed with `android/app/carreau-test.keystore`, a test key that is p
 
 ## CI
 
-`.github/workflows/ci.yml` runs the unit tests and the browser tests, then builds the APK, checks its package name and signature, and publishes it as the latest GitHub release.
+`.github/workflows/ci.yml` runs the unit tests and the browser tests, then builds the APK, checks its package name, version and signature, and publishes it as a GitHub release tagged `v1.1.<run number>` with `carreau-v1.1.<run number>.apk` and `carreau.apk` (the stable link above always points at the latest).

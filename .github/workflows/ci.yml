@@ -61,29 +61,36 @@ jobs:
         working-directory: android
         run: ./gradlew assembleRelease --no-daemon
       - name: Check the APK
+        env:
+          VERSION: 1.1.${{ github.run_number }}
         run: |
           apk=android/app/build/outputs/apk/release/app-release.apk
           test -s "$apk"
           aapt=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)aapt2
           "$aapt" dump badging "$apk" | grep -E "package:|application-label:|sdkVersion"
+          "$aapt" dump badging "$apk" | grep -q "versionName='$VERSION'" || { echo "APK version is not $VERSION"; exit 1; }
           "$(dirname "$aapt")/apksigner" verify --print-certs "$apk" | grep "Carreau test build"
           cp "$apk" carreau.apk
+          cp "$apk" "carreau-v$VERSION.apk"
       - uses: actions/upload-artifact@v4
         with:
-          name: carreau-apk
-          path: carreau.apk
+          name: carreau-v1.1.${{ github.run_number }}
+          path: carreau-v1.1.${{ github.run_number }}.apk
           retention-days: 30
       - name: Publish as the latest release (one-tap download on the phone)
         if: github.event_name == 'push'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: build-${{ github.run_number }}
-          name: Carreau 1.1.${{ github.run_number }}
+          tag_name: v1.1.${{ github.run_number }}
+          name: Carreau v1.1.${{ github.run_number }}
           target_commitish: ${{ github.sha }}
           make_latest: true
-          files: carreau.apk
+          # A versioned copy, plus carreau.apk so the "latest" download link never changes.
+          files: |
+            carreau-v1.1.${{ github.run_number }}.apk
+            carreau.apk
           body: |
-            Test build from `${{ github.ref_name }}` @ ${{ github.sha }}.
+            **Version 1.1.${{ github.run_number }}** (Android versionCode ${{ github.run_number }}), built from `${{ github.ref_name }}` @ ${{ github.sha }}.
 
             Install on Android: download `carreau.apk` on the phone, open it, and allow installs from this source when asked.
             New builds install over this one and keep your progress.
