@@ -2,13 +2,15 @@
   // ---------- Rules (core.js), drawing (board.js), sound (audio.js) ----------
   const {
     WORLDS, WORLD_ORDER, world, initial, clone, same, apply, randomEdges, seeded, sideForSwipe, edgesBetween,
-    gateWall, gateScore, gateScale, WALL_KINDS, gateKind, gateDrop, lockableSide,
+    gateWall, gateScore, gateCombo, gateScale, WALL_KINDS, gateKind, gateDrop, lockableSide,
     dailyInfo, nextStreak, UNLOCKS, isUnlocked, ACHIEVEMENTS, emptyStats, newAchievements,
   } = window.CarreauCore;
   const { BoardView, miniBoard } = window.CarreauBoard;
 
   const RUSH_TIME = 60;
-  const WALL_MODES = ['gates', 'daily', 'tutorial'];
+  const WALL_MODES = ['gates', 'daily', 'precision', 'tutorial'];
+  // Modes that score walls (all wall modes but the tutorial).
+  const scoredWalls = mode => mode === 'gates' || mode === 'daily' || mode === 'precision';
   const isWallMode = mode => WALL_MODES.includes(mode);
   // Modes with a clock: they pause when you leave the app.
   const timed = mode => mode === 'rush' || isWallMode(mode);
@@ -46,7 +48,7 @@
     }
     WORLD_ORDER.forEach(w => {
       const b = s.bests[w] || {};
-      s.bests[w] = { gates: b.gates || 0, rush: b.rush || 0, zen: b.zen || 0 };
+      s.bests[w] = { gates: b.gates || 0, precision: b.precision || 0, rush: b.rush || 0, zen: b.zen || 0 };
     });
     s.stats = Object.assign(emptyStats(), s.stats);
     s.achievements = s.achievements || [];
@@ -169,7 +171,7 @@
     audio.ensure();
     setBoard(w, initial(w));
     $('pause').hidden = !timed(mode);
-    $('items').hidden = mode !== 'gates' && mode !== 'daily';
+    $('items').hidden = !scoredWalls(mode);
     if (mode === 'tutorial') { show('tut'); startWalls(); return; }
     show('hud');
     if (isWallMode(mode)) { startWalls(); return; }
@@ -199,7 +201,8 @@
     if (G.mode !== 'tutorial') {
       audio.setIntensity(0);
       audio.startMusic();
-      say(G.mode === 'daily' ? `daily challenge · ${world(G.world).name}${G.practice ? ' · practice' : ''}` : 'fit the shape before the wall hits');
+      say(G.mode === 'daily' ? `daily challenge · ${world(G.world).name}${G.practice ? ' · practice' : ''}`
+        : G.mode === 'precision' ? 'precision · a wasted swipe costs a life' : 'fit the shape before the wall hits');
     }
   }
   // Walls are made in a chain, each a few swipes from the one before.
@@ -214,7 +217,9 @@
     const t = clone(G.chain);
     randomEdges(spec.k, G.sides, G.rnd).forEach(e => apply(t, e));
     G.chain = t;
-    G.queue.push({ target: t, travel: spec.travel * (kind === 'gold' ? .7 : 1), kind, drop });
+    // Precision walls come slower: you are meant to think before you swipe.
+    const travel = spec.travel * (kind === 'gold' ? .7 : 1) * (G.mode === 'precision' ? 1.25 : 1);
+    G.queue.push({ target: t, travel, kind, drop });
   }
   function spawnWall() {
     const wall = G.queue.shift();
@@ -228,7 +233,7 @@
     }
     G.wall = wall; G.target = wall.target;
     G.optimal = edgesBetween(state, wall.target).length;
-    G.moves = 0; G.phase = 'approach'; G.warned = false; G.blinked = false;
+    G.moves = 0; G.wasted = 0; G.phase = 'approach'; G.warned = false; G.blinked = false;
     G.p = G.prevKind === 'double' ? .4 : 0; // the second half of a double wall is already close
     mainView.setWall(wall.target, wall.kind, wall.drop ? wall.drop.toUpperCase() : '');
     mainView.setLock(wall.lock);
@@ -299,13 +304,35 @@
     else if (G.mode === 'tutorial') showGuide();
     updateHud();
   }
+  function wastedSwipe() {
+    G.wasted++;
+    if (G.mode === 'tutorial') return;
+    if (G.mode === 'precision') {
+      // Precision: every wasted swipe costs a life and the combo, straight away.
+      G.lives--; G.combo = 0; G.clean = 0;
+      bump(1); bump(2);
+      say(G.lives > 0 ? 'wasted swipe · −1 life' : 'wasted swipe · out of lives', 'bad');
+      floatText('−1 life', 'bad');
+      flash('bad');
+      restart(boardEl, 'shake');
+      audio.play('crash');
+      haptic('fail');
+      if (G.lives <= 0) { G.locked = true; G.phase = 'crash'; later(finish, 900); }
+      return;
+    }
+    // Gates and Daily: the wall will score less; say so unless the holes are hidden (blink).
+    if (!G.blinked) say(`extra swipe · fewest was ${G.optimal}`, 'bad');
+    audio.play('locked');
+  }
   function passWall() {
-    const wall = G.wall, perfect = G.moves === G.optimal, st = save.stats;
-    G.combo++; G.cleared++; G.walls++;
+    const wall = G.wall, wasted = G.wasted, perfect = wasted === 0, st = save.stats;
+    G.combo = G.mode === 'precision' ? G.combo + 1 : gateCombo(G.combo, wasted);
+    G.cleared++; G.walls++;
     G.bestCombo = Math.max(G.bestCombo, G.combo);
     G.clean = perfect ? G.clean + 1 : 0;
     if (perfect) G.perfect++;
-    let pts = gateScore(G.combo, 1 - G.p, perfect) * (wall.kind === 'gold' ? 3 : 1);
+    let pts = gateScore(G.combo, 1 - G.p, wasted) * (wall.kind === 'gold' ? 3 : 1);
+    if (G.mode === 'precision' && perfect) pts = Math.round(pts * 1.5);
     if (G.mode === 'tutorial') pts = 0;
     G.score += pts;
     G.prevKind = wall.kind;
@@ -315,7 +342,8 @@
       bump(0); bump(1);
       const tags = [];
       if (G.combo > 1) tags.push(`combo ×${Math.min(G.combo, 10)}`);
-      if (perfect) tags.push('clean');
+      if (perfect) tags.push(G.mode === 'precision' ? 'clean ×1.5' : 'clean');
+      else if (G.mode !== 'precision') tags.push(`${wasted} wasted swipe${wasted > 1 ? 's' : ''} · −${Math.min(75, wasted * 25)}%`);
       if (wall.kind === 'gold') tags.push('gold ×3');
       if (wall.drop) { G.items[wall.drop] = Math.min(3, G.items[wall.drop] + 1); tags.push(`+${ITEM_NAMES[wall.drop]}`); audio.play('item'); }
       if (G.cleared % 15 === 0 && G.lives < 3) { G.lives++; bump(2); tags.push('+1 life'); }
@@ -476,7 +504,7 @@
     G.timers.forEach(t => t.arm());
     show(G.mode === 'tutorial' ? 'tut' : 'hud');
     if (isWallMode(G.mode)) {
-      if (G.mode !== 'tutorial') { audio.startMusic(); say('fit the shape before the wall hits'); }
+      if (G.mode !== 'tutorial') { audio.startMusic(); say(G.mode === 'precision' ? 'precision · a wasted swipe costs a life' : 'fit the shape before the wall hits'); }
       requestAnimationFrame(wallTick);
     } else {
       say('match the target');
@@ -486,10 +514,10 @@
   function updateHud() {
     if (!G) return;
     const m = G.mode;
-    if (m === 'gates' || m === 'daily') {
+    if (scoredWalls(m)) {
       setStats([['Score', fmt(G.score)], ['Combo', '×' + Math.min(Math.max(G.combo, 1), 10)], ['Lives', hearts(G.lives)]]);
       setBar(1 - G.p, G.p > .75);
-      $('line').textContent = `Wall ${G.walls + (G.phase === 'approach' ? 1 : 0)}`;
+      $('line').textContent = `Wall ${G.walls + (G.phase === 'approach' ? 1 : 0)} · min ${G.optimal}`;
       ['slow', 'shield', 'skip'].forEach(k => {
         const el = $('item-' + k);
         el.querySelector('b').textContent = G.items[k];
@@ -518,6 +546,7 @@
       say('that side is locked', 'bad');
       return;
     }
+    const before = G && G.target ? edgesBetween(state, G.target).length : 0;
     apply(state, side);
     mainView.set(state);
     fireEdge(side);
@@ -525,7 +554,12 @@
     haptic('tap');
     if (!G) return;
     G.moves++;
-    if (isWallMode(G.mode)) return wallMove();
+    if (isWallMode(G.mode)) {
+      // A swipe that takes the board further from the target is wasted.
+      if (G.phase === 'approach' && edgesBetween(state, G.target).length > before) wastedSwipe();
+      if (G) wallMove();
+      return;
+    }
     if (same(state, G.target)) roundWin();
     updateHud();
   }
@@ -559,14 +593,14 @@
     st.seconds += Math.round((performance.now() - g.started) / 1000);
     const extra = [];
     let title, text;
-    if (g.mode === 'gates' || g.mode === 'daily') {
+    if (scoredWalls(g.mode)) {
       st.runs++;
       st.bestScore = Math.max(st.bestScore, g.score);
       const best = save.bests[g.world];
       let isBest = false;
-      if (g.mode === 'gates') {
-        isBest = g.score > best.gates;
-        if (isBest) best.gates = g.score;
+      if (g.mode === 'gates' || g.mode === 'precision') {
+        isBest = g.score > best[g.mode];
+        if (isBest) best[g.mode] = g.score;
       }
       text = `${fmt(g.score)} points. ${g.cleared} wall${g.cleared === 1 ? '' : 's'} cleared, best combo ×${Math.min(g.bestCombo, 10)}.`;
       if (g.mode === 'daily') {
@@ -582,7 +616,7 @@
         }
       } else {
         title = isBest ? 'New best!' : 'Crashed out.';
-        text += ` Best in ${world(g.world).name}: ${fmt(best.gates)}.`;
+        text += ` Best ${g.mode === 'precision' ? 'Precision ' : ''}in ${world(g.world).name}: ${fmt(best[g.mode])}.`;
       }
       checkUnlocks().forEach(w => extra.push(`${world(w).name} unlocked`));
       checkAchievements();
@@ -636,6 +670,7 @@
     const w = settings.world, best = save.bests[w];
     $('worldBlurb').textContent = world(w).blurb;
     $('bestGates').textContent = best.gates ? `Best ${fmt(best.gates)}` : 'New';
+    $('bestPrecision').textContent = best.precision ? `Best ${fmt(best.precision)}` : 'New';
     $('bestRush').textContent = best.rush ? `Best ${best.rush}` : 'New';
     $('bestZen').textContent = best.zen ? `Best run ${best.zen}` : 'New';
     const d = dailyInfo(), played = save.daily.key === d.key, streak = save.stats.dailyLast >= d.day - 1 ? save.stats.dailyStreak : 0;

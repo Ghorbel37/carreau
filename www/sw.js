@@ -1,5 +1,5 @@
 // Offline support: serve from cache, refresh the cache in the background.
-const CACHE = 'carreau-v4';
+const CACHE = 'carreau-v5';
 const FILES = [
   './', 'index.html', 'style.css', 'core.js', 'board.js', 'audio.js', 'game.js', 'manifest.webmanifest',
   'fonts/fonts.css', 'fonts/kalam-400.woff2', 'fonts/kalam-700.woff2', 'fonts/atkinson-400.woff2', 'fonts/atkinson-700.woff2',

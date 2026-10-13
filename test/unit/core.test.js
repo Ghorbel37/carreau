@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const core = require('../../www/core.js');
 
 const {
-  gateWall, gateScore, gateScale, WALL_KINDS, gateKind, POWERUPS, gateDrop, lockableSide,
+  gateWall, gateScore, gateCombo, gateScale, WALL_KINDS, gateKind, POWERUPS, gateDrop, lockableSide,
   dailyInfo, nextStreak, UNLOCKS, isUnlocked, ACHIEVEMENTS, emptyStats, newAchievements,
   WORLDS, WORLD_ORDER, initial, clone, same, apply, edgesBetween,
   randomEdges, seeded, vertices, piecePolygon, sideForSwipe,
@@ -151,12 +151,21 @@ test('gates: walls start gentle, tighten, and never ask for more sides than the 
   }
 });
 
-test('gates: score rewards early, clean clears and combos up to ×10', () => {
-  assert.equal(gateScore(1, 0, false), 100);
-  assert.equal(gateScore(1, .5, false), 150);
-  assert.equal(gateScore(1, 1, true), 250);
-  assert.equal(gateScore(3, .5, true), 600);
-  assert.equal(gateScore(25, 0, false), 1000);
+test('gates: score rewards early, clean clears and combos up to ×10; wasted swipes cost a quarter each', () => {
+  assert.equal(gateScore(1, 0), 150);            // clean
+  assert.equal(gateScore(1, 0, 1), 75);          // one wasted swipe: no clean bonus, 3/4 of 100
+  assert.equal(gateScore(1, 1, 2), 100);         // two: half of 200
+  assert.equal(gateScore(1, 1, 9), 50);          // never below a quarter
+  assert.equal(gateScore(3, .5), 600);
+  assert.equal(gateScore(25, 0), 1500);
+});
+
+test('gates: the combo grows by one per wall and drops by one per wasted swipe', () => {
+  assert.equal(gateCombo(0), 1);
+  assert.equal(gateCombo(4), 5);
+  assert.equal(gateCombo(4, 1), 4);
+  assert.equal(gateCombo(4, 3), 2);
+  assert.equal(gateCombo(2, 9), 1);
 });
 
 test('gates: a wall looks a quarter size far away and full size on arrival', () => {
@@ -213,12 +222,12 @@ test('daily: same walls for everyone on a day, a new world each day, streaks', (
   assert.equal(nextStreak(-1, 0, a.day), 1);
 });
 
-test('unlocks: triangle open, Carreau at 3,000 in Triangle, Ruche at 8,000 in Carreau', () => {
+test('unlocks: triangle open, Carreau at 25,000 in Triangle, Ruche at 60,000 in Carreau', () => {
   assert.ok(isUnlocked('tri', {}));
-  assert.ok(!isUnlocked('square', { tri: 2999 }));
-  assert.ok(isUnlocked('square', { tri: 3000 }));
-  assert.ok(!isUnlocked('hex', { tri: 99999, square: 7999 }));
-  assert.ok(isUnlocked('hex', { square: 8000 }));
+  assert.ok(!isUnlocked('square', { tri: 24999 }));
+  assert.ok(isUnlocked('square', { tri: 25000 }));
+  assert.ok(!isUnlocked('hex', { tri: 999999, square: 59999 }));
+  assert.ok(isUnlocked('hex', { square: 60000 }));
   assert.ok(isUnlocked('square', { square: 120 }), 'a world you already scored in stays open');
   assert.equal(UNLOCKS.square.after, 'tri');
 });
@@ -230,5 +239,5 @@ test('achievements: unique ids, earned once, from stats', () => {
   s.walls = 1; s.bestCombo = 5;
   assert.deepEqual(newAchievements([], s, {}), ['first', 'combo5']);
   assert.deepEqual(newAchievements(['first', 'combo5'], s, {}), []);
-  assert.deepEqual(newAchievements(['first', 'combo5'], s, { tri: 3000 }), ['square']);
+  assert.deepEqual(newAchievements(['first', 'combo5'], s, { tri: 25000 }), ['square']);
 });

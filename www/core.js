@@ -85,12 +85,17 @@
     const travel = Math.max(1.6, 4.5 - n * .1) + (k - 1) * .35; // extra time for each extra swipe
     return { k, travel: Math.round(travel * 100) / 100 };
   }
-  // Points for a cleared wall: base 100, plus up to 100 for clearing it early, plus 50 with no wasted
-  // swipe, all times the combo (walls cleared in a row, this one included, capped at 10).
-  function gateScore(combo, earlyFraction, perfect) {
+  // A wasted swipe is one that takes the board further from the target (every swipe changes the distance
+  // by exactly one). Points for a cleared wall: base 100, plus up to 100 for clearing it early, plus 50
+  // when no swipe was wasted; then a quarter off for each wasted swipe (never below a quarter);
+  // all times the combo (capped at 10).
+  function gateScore(combo, earlyFraction, wasted = 0) {
     const early = Math.round(Math.max(0, Math.min(1, earlyFraction)) * 100);
-    return (100 + early + (perfect ? 50 : 0)) * Math.min(Math.max(1, combo), 10);
+    const keep = Math.max(.25, 1 - .25 * wasted);
+    return Math.round((100 + early + (wasted ? 0 : 50)) * keep) * Math.min(Math.max(1, combo), 10);
   }
+  // Combo after clearing a wall: +1 for the wall, −1 for each wasted swipe, never below 1.
+  const gateCombo = (prev, wasted = 0) => Math.max(1, prev + 1 - wasted);
   // Apparent size of a wall that is a fraction p of the way to the board (perspective: size ∝ 1 / distance).
   const gateScale = p => 1 / (1 + 3 * (1 - Math.max(0, Math.min(1, p))));
 
@@ -144,7 +149,7 @@
 
   // ---------- Unlocks ----------
   // Triangle is open from the start; each next world opens with a Gates score in the one before.
-  const UNLOCKS = { tri: null, square: { after: 'tri', score: 3000 }, hex: { after: 'square', score: 8000 } };
+  const UNLOCKS = { tri: null, square: { after: 'tri', score: 25000 }, hex: { after: 'square', score: 60000 } };
   function isUnlocked(worldId, bests) {
     const u = UNLOCKS[worldId];
     return !u || (bests[u.after] || 0) >= u.score || (bests[worldId] || 0) > 0;
@@ -220,7 +225,7 @@
   return {
     WORLDS, WORLD_ORDER, world, initial, clone, same, apply, edgesBetween,
     randomEdges, seeded, vertices, piecePolygon, sideForSwipe,
-    gateWall, gateScore, gateScale, WALL_KINDS, gateKind, POWERUPS, gateDrop, lockableSide,
+    gateWall, gateScore, gateCombo, gateScale, WALL_KINDS, gateKind, POWERUPS, gateDrop, lockableSide,
     dailyInfo, nextStreak, UNLOCKS, isUnlocked, ACHIEVEMENTS, STAT_KEYS, emptyStats, newAchievements,
   };
 });

@@ -35,15 +35,16 @@ Keyboard: number keys work side 1, 2, 3…; on the square board the arrow keys a
 
 ## Modes
 
-- **Gates** (the main mode): walls with holes in a target shape fly at the board, growing as they come closer. Reshape the pieces to fit the holes before a wall arrives; a piece is outlined green once it fits, and the next wall is previewed. Score = 100 + up to 100 for clearing early + 50 for no wasted swipe, times the combo (walls cleared in a row, up to ×10). A crash costs one of three lives and resets the combo; every 15 walls cleared gives a life back. Walls get faster and need more swipes as the run goes on.
+- **Gates** (the main mode): walls with holes in a target shape fly at the board, growing as they come closer. Reshape the pieces to fit the holes before a wall arrives; a piece is outlined green once it fits, and the next wall is previewed. The HUD shows the fewest swipes the wall needs. Score = 100 + up to 100 for clearing early + 50 for no wasted swipe, times the combo (walls cleared in a row, up to ×10). A **wasted swipe** is one that takes the board further from the target: each one takes a quarter off that wall's points (never below a quarter) and a step off the combo. A crash costs one of three lives and resets the combo; every 15 walls cleared gives a life back. Walls get faster and need more swipes as the run goes on.
   - **Special walls** (from wall 6): **blink** — the holes close partway, fit them from memory; **locked** — one side is chained and can't be swiped; **gold** — 30% faster, triple points; **double** — the next wall follows close behind.
   - **Power-ups** ride on some walls (from wall 7); clear the wall to collect: **slow** (walls at half speed for 5 s), **shield** (the next crash costs no life and keeps the combo), **skip** (the current wall vanishes).
 - **Daily**: the same walls for everyone each day, in a world that changes daily (any world, even one you haven't unlocked). The first run of the day counts and builds your streak; later runs are practice.
+- **Precision**: Gates for careful players. Walls come 25% slower, but every wasted swipe immediately costs a life and resets the combo; clean clears score ×1.5.
 - **Rush**: match as many shapes as you can against a 60-second clock.
 - **Zen**: endless shapes, no clock.
-- **How to play**: a three-wall guided tutorial, also shown the first time you play Gates.
+- **How to play** (link under the modes): a three-wall guided tutorial, also shown the first time you play Gates.
 
-**Worlds unlock in order:** Triangle is open from the start, Carreau opens at 3,000 points in Triangle Gates, Ruche at 8,000 in Carreau.
+**Worlds unlock in order:** Triangle is open from the start, Carreau opens at 25,000 points in Triangle Gates, Ruche at 60,000 in Carreau.
 
 **Stats and achievements** (trophy button): lifetime stats and 14 achievements, which pop up as you earn them.
 

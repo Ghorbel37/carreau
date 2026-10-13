@@ -17,7 +17,7 @@ test.describe('home and controls', () => {
     await page.goto('/');
     await expect(page.locator('#home')).toBeVisible();
     await expect(page.locator('.world')).toHaveText([/Triangle/, /Carreau/, /Ruche/]);
-    await expect(page.locator('.mode')).toHaveText([/Gates/, /Daily/, /Rush/, /Zen/, /How to play/]);
+    await expect(page.locator('.mode')).toHaveText([/Gates/, /Daily/, /Precision/, /Rush/, /Zen/]);
     await expect(page.locator('#board')).toHaveAttribute('data-world', 'square');
     expect(await boardState(page)).toEqual(SKETCH);
   });
@@ -80,10 +80,10 @@ test.describe('new players', () => {
     await page.goto('/');
     await expect(page.locator('#board')).toHaveAttribute('data-world', 'tri');
     await expect(page.locator('.world[data-world=square]')).toHaveClass(/locked/);
-    await expect(page.locator('.world[data-world=square] em')).toHaveText('3,000 in Triangle');
-    await expect(page.locator('.world[data-world=hex] em')).toHaveText('8,000 in Carreau');
+    await expect(page.locator('.world[data-world=square] em')).toHaveText('25,000 in Triangle');
+    await expect(page.locator('.world[data-world=hex] em')).toHaveText('60,000 in Carreau');
     await page.locator('.world[data-world=square]').click();
-    await expect(page.locator('#hint')).toHaveText(/score 3,000 in Triangle Gates to unlock Carreau/);
+    await expect(page.locator('#hint')).toHaveText(/score 25,000 in Triangle Gates to unlock Carreau/);
     await expect(page.locator('#board')).toHaveAttribute('data-world', 'tri');
   });
 
@@ -110,12 +110,12 @@ test.describe('new players', () => {
     await expect(page.locator('#hud')).toBeVisible(); // straight to the game now
   });
 
-  test('unlock Carreau with 3,000 points in Triangle', async ({ page }) => {
+  test('unlock Carreau with 25,000 points in Triangle', async ({ page }) => {
     await page.clock.install();
     await page.addInitScript(() => localStorage.setItem('carreau-settings', localStorage.getItem('carreau-settings') || JSON.stringify({ tutorialDone: true })));
     await page.goto('/?kinds=&drops=');
     await page.locator('[data-mode=gates]').click();
-    while (Number((await page.locator('#v0').textContent()).replace(/,/g, '')) < 3000) {
+    while (Number((await page.locator('#v0').textContent()).replace(/,/g, '')) < 25000) {
       await solve(page);
       await page.clock.runFor(500);
     }
@@ -208,6 +208,24 @@ test.describe('Gates', () => {
     await solve(page);
     await expect(page.locator('#v1')).toHaveText('×2');
     expect(await score(page)).toBeGreaterThan(first * 2);
+  });
+
+  test('shows the fewest swipes; a wasted swipe costs a combo step and a quarter of the points', async ({ page }) => {
+    await start(page);
+    await solve(page); await page.clock.runFor(600);
+    await solve(page); await page.clock.runFor(600);
+    await expect(page.locator('#v1')).toHaveText('×2');
+    const path = await pathTo(page, await currentTarget(page));
+    await expect(page.locator('#line')).toHaveText(`Wall 3 · min ${path.length}`);
+    const before = await score(page);
+    const wrong = notNeeded(path);
+    await press(page, [wrong]);
+    await expect(page.locator('#hint')).toHaveText(`extra swipe · fewest was ${path.length}`);
+    await press(page, [wrong, ...path]);         // undo the detour, then fit
+    await expect(page.locator('#v1')).toHaveText('×2'); // +1 for the wall, −1 for the wasted swipe
+    await expect(page.locator('#hint')).toContainText('1 wasted swipe · −25%');
+    const gained = (await score(page)) - before;
+    expect(gained).toBeLessThanOrEqual(Math.round(200 * .75) * 2);
   });
 
   test('pieces that fit their hole are marked', async ({ page }) => {
@@ -320,6 +338,46 @@ test.describe('Gates', () => {
     await expect(page.locator('#statGrid')).toContainText('Walls cleared');
     await page.keyboard.press('Escape');
     await expect(page.locator('#home')).toBeVisible();
+  });
+});
+
+test.describe('Precision', () => {
+  test.beforeEach(({ page }) => returning(page));
+
+  test('a wasted swipe costs a life at once; clean walls score ×1.5', async ({ page }) => {
+    await page.clock.install();
+    await page.goto('/?kinds=&drops=');
+    await page.locator('[data-mode=precision]').click();
+    await expect(page.locator('#hint')).toHaveText(/a wasted swipe costs a life/);
+    await solve(page);
+    await expect(page.locator('#hint')).toContainText('clean ×1.5');
+    const first = Number((await page.locator('#v0').textContent()).replace(/,/g, ''));
+    expect(first).toBeGreaterThan(300); // (100 + early + 50) × 1.5
+    await page.clock.runFor(600);
+    const path = await pathTo(page, await currentTarget(page));
+    const wrong = notNeeded(path);
+    for (const [i, h] of [['♥♥♡'], ['♥♡♡']].entries()) {
+      await press(page, [wrong]);
+      await expect(page.locator('#v2')).toHaveText(h[0]);
+      await expect(page.locator('#v1')).toHaveText('×1');
+      if (i === 0) await press(page, [wrong]); // undo; moving back closer is not wasted
+      await expect(page.locator('#v2')).toHaveText(h[0]);
+    }
+    await press(page, [wrong, wrong]);          // undo (not wasted), then waste the last life
+    await page.clock.runFor(1_000);
+    await expect(page.locator('#resTitle')).toHaveText(/New best!|Crashed out\./);
+    await page.locator('#resAlt').click();
+    await expect(page.locator('#bestPrecision')).toHaveText(/^Best /);
+  });
+
+  test('walls come slower than in Gates', async ({ page }) => {
+    await page.clock.install();
+    await page.goto('/?kinds=&drops=');
+    await page.locator('[data-mode=precision]').click();
+    await page.clock.runFor(5_000); // a Gates wall (4.5 s) would have hit by now
+    await expect(page.locator('#v2')).toHaveText('♥♥♥');
+    await page.clock.runFor(1_000);
+    await expect(page.locator('#v2')).toHaveText('♥♥♡');
   });
 });
 
