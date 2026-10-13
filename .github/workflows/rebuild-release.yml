@@ -1,0 +1,67 @@
+name: Rebuild release
+
+# Rebuild the APK of an earlier commit and publish it as release v1.1.<build>,
+# e.g. to replace the old build-N releases. It never becomes the "latest" release.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Commit to build
+        required: true
+      build:
+        description: Build number (the release becomes v1.1.<build>, versionCode <build>)
+        required: true
+
+jobs:
+  rebuild:
+    name: Rebuild v1.1.${{ inputs.build }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      VERSION: 1.1.${{ inputs.build }}
+      CARREAU_BUILD: ${{ inputs.build }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+      - run: npm ci
+      - name: Use the requested build number for the version
+        run: |
+          # Older commits read the version from CI's run number; point them at the requested one.
+          sed -i 's/System.getenv("GITHUB_RUN_NUMBER")/System.getenv("CARREAU_BUILD")/' android/app/build.gradle
+          grep -q CARREAU_BUILD android/app/build.gradle
+          if [ -f www/version.js ]; then echo "window.CARREAU_VERSION = '$VERSION';" > www/version.js; fi
+      - name: Copy the web game into the Android project
+        run: npx cap sync android
+      - name: Build APK
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon
+      - name: Check the APK
+        run: |
+          apk=android/app/build/outputs/apk/release/app-release.apk
+          aapt=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)aapt2
+          "$aapt" dump badging "$apk" | grep -q "versionName='$VERSION'" || { echo "APK version is not $VERSION"; exit 1; }
+          "$(dirname "$aapt")/apksigner" verify --print-certs "$apk" | grep "Carreau test build"
+          cp "$apk" "carreau-v$VERSION.apk"
+      - uses: softprops/action-gh-release@v3
+        with:
+          tag_name: v${{ env.VERSION }}
+          name: Carreau v${{ env.VERSION }}
+          target_commitish: ${{ inputs.ref }}
+          make_latest: false
+          files: carreau-v${{ env.VERSION }}.apk
+          body: |
+            **Version ${{ env.VERSION }}** (Android versionCode ${{ inputs.build }}), rebuilt from commit ${{ inputs.ref }}.
+
+            An older build. The newest one is always at https://github.com/Ghorbel37/carreau/releases/latest/download/carreau.apk
