@@ -336,6 +336,7 @@ test.describe('Gates', () => {
     await expect(page.locator('#achCount')).toHaveText(/^3 \/ \d+$/);
     await expect(page.locator('#achList li.done')).toHaveText([/Through the gap/, /Back to the square/, /Into the hive/]);
     await expect(page.locator('#statGrid')).toContainText('Walls cleared');
+    await expect(page.locator('#version')).toHaveText('Carreau (development build)');
     await page.keyboard.press('Escape');
     await expect(page.locator('#home')).toBeVisible();
   });

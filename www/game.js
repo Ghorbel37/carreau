@@ -725,6 +725,7 @@
       li.append(b, s); list.appendChild(li);
     });
     $('achCount').textContent = `${save.achievements.length} / ${ACHIEVEMENTS.length}`;
+    $('version').textContent = `Carreau ${window.CARREAU_VERSION && window.CARREAU_VERSION !== 'dev' ? 'v' + window.CARREAU_VERSION : '(development build)'}`;
     show('stats');
     say('your progress');
   }
