@@ -3,9 +3,10 @@ const assert = require('node:assert/strict');
 const core = require('../../www/core.js');
 
 const {
-  gateWall, gateScore, gateScale,
-  WORLDS, WORLD_ORDER, LEVEL_COUNT, initial, clone, same, apply, edgesBetween,
-  randomEdges, seeded, levelDef, starsFor, vertices, piecePolygon, sideForSwipe,
+  gateWall, gateScore, gateScale, WALL_KINDS, gateKind, POWERUPS, gateDrop, lockableSide,
+  dailyInfo, nextStreak, UNLOCKS, isUnlocked, ACHIEVEMENTS, emptyStats, newAchievements,
+  WORLDS, WORLD_ORDER, initial, clone, same, apply, edgesBetween,
+  randomEdges, seeded, vertices, piecePolygon, sideForSwipe,
 } = core;
 
 // Square world: vertices top-left, top-right, bottom-right, bottom-left; sides top, right, bottom, left.
@@ -87,24 +88,6 @@ for (const id of WORLD_ORDER) {
     }
   });
 
-  test(`${id}: levels are stable, distinct per world and solvable`, () => {
-    for (let lv = 1; lv <= LEVEL_COUNT; lv++) {
-      const d = levelDef(id, lv);
-      assert.deepEqual(levelDef(id, lv), d);
-      assert.equal(d.start.length, n);
-      assert.equal(d.targets.length, lv <= 8 ? 1 : lv <= 18 ? 2 : 3);
-      let cur = d.start, total = 0;
-      for (const t of d.targets) {
-        const path = edgesBetween(cur, t);
-        assert.ok(path && path.length >= 1, `${id} level ${lv} target reachable`);
-        total += path.length; cur = t;
-      }
-      assert.equal(total, d.optimal);
-      assert.equal((d.budget - d.optimal) % 2, 0, 'slack is usable');
-      assert.equal(d.budget === d.optimal, lv >= 25);
-    }
-  });
-
   test(`${id}: pieces never overlap, even at full size`, () => {
     const verts = vertices(id);
     const big = verts.map(() => [2, 2]);
@@ -150,17 +133,6 @@ test('square swipes match the notebook: ⇄ in the top half is the top side, ⇅
   assert.equal(sideForSwipe('square', 4, 80, -50, 10), LEFT);
 });
 
-test('levels differ between worlds', () => {
-  assert.notDeepEqual(levelDef('tri', 12).start.length, levelDef('hex', 12).start.length);
-  assert.notDeepEqual(JSON.stringify(levelDef('square', 12)), JSON.stringify(levelDef('square', 13)));
-});
-
-test('stars: 3 for fewest moves, 2 for one detour (two extra moves), else 1', () => {
-  assert.equal(starsFor(3, 3), 3);
-  assert.equal(starsFor(5, 3), 2);
-  assert.equal(starsFor(7, 3), 1);
-});
-
 test('gates: walls start gentle, tighten, and never ask for more sides than the board has', () => {
   for (const id of WORLD_ORDER) {
     const n = WORLDS[id].sides;
@@ -192,4 +164,71 @@ test('gates: a wall looks a quarter size far away and full size on arrival', () 
   assert.equal(gateScale(1), 1);
   assert.ok(gateScale(.5) > .25 && gateScale(.5) < 1);
   assert.ok(gateScale(.9) - gateScale(.8) > gateScale(.2) - gateScale(.1), 'it speeds up as it gets close');
+});
+
+test('gates: the first walls are plain; specials and power-ups mix in later, from a known set', () => {
+  const rnd = seeded(5);
+  const kinds = new Set(), drops = new Set();
+  for (let n = 0; n < 5; n++) assert.equal(gateKind(n, rnd), 'normal');
+  for (let n = 0; n < 6; n++) assert.equal(gateDrop(n, rnd), null);
+  let special = 0;
+  for (let i = 0; i < 4000; i++) {
+    const n = 5 + (i % 60), k = gateKind(n, rnd), d = gateDrop(n + 1, rnd);
+    assert.ok(k in WALL_KINDS);
+    kinds.add(k); if (k !== 'normal') special++;
+    if (d) { assert.ok(POWERUPS.includes(d)); drops.add(d); }
+  }
+  assert.deepEqual([...kinds].sort(), Object.keys(WALL_KINDS).sort());
+  assert.deepEqual([...drops].sort(), [...POWERUPS].sort());
+  assert.ok(special > 4000 * .2 && special < 4000 * .55, `special share ${special}`);
+  for (let n = 5; n < 8; n++) for (let i = 0; i < 200; i++) assert.ok(['normal', 'blink', 'gold'].includes(gateKind(n, rnd)));
+});
+
+test('gates: a locked side is never one the board needs', () => {
+  const rnd = seeded(11);
+  for (const id of WORLD_ORDER) {
+    const n = WORLDS[id].sides;
+    for (let i = 0; i < 200; i++) {
+      const target = initial(id);
+      const need = randomEdges(1 + Math.floor(rnd() * n), n, rnd);
+      need.forEach(e => apply(target, e));
+      const lock = lockableSide(initial(id), target, rnd);
+      if (need.length === n) assert.equal(lock, null);
+      else assert.ok(lock !== null && !need.includes(lock));
+    }
+  }
+});
+
+test('daily: same walls for everyone on a day, a new world each day, streaks', () => {
+  const a = dailyInfo(new Date(2026, 9, 13, 8)), b = dailyInfo(new Date(2026, 9, 13, 23)), c = dailyInfo(new Date(2026, 9, 14, 1));
+  assert.deepEqual(a, b);
+  assert.equal(a.key, '2026-10-13');
+  assert.equal(c.day, a.day + 1);
+  assert.notEqual(c.world, a.world);
+  assert.ok(WORLD_ORDER.includes(a.world));
+  assert.notEqual(a.seed, c.seed);
+  assert.equal(nextStreak(a.day - 1, 4, a.day), 5);
+  assert.equal(nextStreak(a.day, 4, a.day), 4);
+  assert.equal(nextStreak(a.day - 3, 4, a.day), 1);
+  assert.equal(nextStreak(-1, 0, a.day), 1);
+});
+
+test('unlocks: triangle open, Carreau at 3,000 in Triangle, Ruche at 8,000 in Carreau', () => {
+  assert.ok(isUnlocked('tri', {}));
+  assert.ok(!isUnlocked('square', { tri: 2999 }));
+  assert.ok(isUnlocked('square', { tri: 3000 }));
+  assert.ok(!isUnlocked('hex', { tri: 99999, square: 7999 }));
+  assert.ok(isUnlocked('hex', { square: 8000 }));
+  assert.ok(isUnlocked('square', { square: 120 }), 'a world you already scored in stays open');
+  assert.equal(UNLOCKS.square.after, 'tri');
+});
+
+test('achievements: unique ids, earned once, from stats', () => {
+  assert.equal(new Set(ACHIEVEMENTS.map(a => a.id)).size, ACHIEVEMENTS.length);
+  const s = emptyStats();
+  assert.deepEqual(newAchievements([], s, {}), []);
+  s.walls = 1; s.bestCombo = 5;
+  assert.deepEqual(newAchievements([], s, {}), ['first', 'combo5']);
+  assert.deepEqual(newAchievements(['first', 'combo5'], s, {}), []);
+  assert.deepEqual(newAchievements(['first', 'combo5'], s, { tri: 3000 }), ['square']);
 });

@@ -37,8 +37,7 @@
     },
   };
   const WORLD_ORDER = ['tri', 'square', 'hex'];
-  const LEVEL_COUNT = 30;
-
+  
   const world = id => WORLDS[id] || WORLDS.square;
   const initial = id => world(id).start.map(p => p.slice());
   const clone = s => s.map(p => p.slice());
@@ -67,7 +66,7 @@
     return arr;
   }
   const randomEdges = (k, n, rnd = Math.random) => shuffle([...Array(n).keys()], rnd).slice(0, k);
-  function seeded(seed) { // mulberry32 — levels are the same on every device
+  function seeded(seed) { // mulberry32 — the daily challenge is the same on every device
     return () => {
       seed = seed + 0x6D2B79F5 | 0;
       let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
@@ -75,34 +74,6 @@
       return ((t ^ t >>> 14) >>> 0) / 4294967296;
     };
   }
-  // How many sides a target in level n of a world changes.
-  function levelMoves(n, sides, r) {
-    if (n <= 3) return 1;
-    if (n <= 8) return Math.min(sides, 2 + Math.floor(r() * 3));
-    return 1 + Math.floor(r() * sides);
-  }
-  function levelDef(worldId, n) {
-    const w = world(worldId);
-    const r = seeded(n * 7919 + 17 + WORLD_ORDER.indexOf(w.id) * 104729);
-    const start = [];
-    for (let i = 0; i < w.sides; i++) start.push([1 + (r() < .5), 1 + (r() < .5)]);
-    const count = n <= 8 ? 1 : n <= 18 ? 2 : 3;
-    const targets = [];
-    let cur = start, optimal = 0;
-    for (let i = 0; i < count; i++) {
-      const k = levelMoves(n, w.sides, r);
-      const t = clone(cur);
-      randomEdges(k, w.sides, r).forEach(e => apply(t, e));
-      targets.push(t); optimal += k; cur = t;
-    }
-    // Every swipe flips one side, so the move count always has the same parity as the optimum:
-    // slack is even, and levels 25+ must be solved perfectly.
-    const slack = n <= 10 ? 4 : n <= 24 ? 2 : 0;
-    return { start, targets, optimal, budget: optimal + slack };
-  }
-  // One wasted swipe always costs two moves (it has to be undone), so ★★ allows one detour.
-  const starsFor = (moves, optimal) => moves <= optimal ? 3 : moves <= optimal + 2 ? 2 : 1;
-
   // ---------- Gates ----------
   // Walls with holes in the target's shape fly at the board. Wall n (0-based) changes k sides of the
   // previous wall's shape and takes `travel` seconds to arrive; both tighten as the run goes on.
@@ -122,6 +93,85 @@
   }
   // Apparent size of a wall that is a fraction p of the way to the board (perspective: size ∝ 1 / distance).
   const gateScale = p => 1 / (1 + 3 * (1 - Math.max(0, Math.min(1, p))));
+
+  // Special walls, mixed in once a run is going:
+  //   blink  — the holes vanish partway, fit them from memory
+  //   locked — one side is chained and can't be swiped
+  //   gold   — 30% faster, worth triple points
+  //   double — the next wall follows straight behind it
+  const WALL_KINDS = {
+    normal: { label: '' },
+    blink: { label: 'blink wall · remember the holes' },
+    locked: { label: 'locked wall · one side is chained' },
+    gold: { label: 'gold wall · fast, triple points' },
+    double: { label: 'double wall · another right behind' },
+  };
+  function gateKind(n, rnd = Math.random) {
+    if (n < 5) return 'normal';
+    const r = rnd();
+    const odds = Math.min(.5, .25 + n * .006); // special walls get more common
+    if (r >= odds) return 'normal';
+    const pick = r / odds; // 0..1 within the special share
+    if (n < 8) return pick < .5 ? 'blink' : 'gold';
+    return pick < .3 ? 'blink' : pick < .55 ? 'locked' : pick < .78 ? 'double' : 'gold';
+  }
+  // Power-ups ride on some walls; clearing the wall collects it.
+  //   slow   — walls move at half speed for 5 seconds
+  //   shield — the next crash costs no life and keeps the combo
+  //   skip   — the current wall vanishes without a crash
+  const POWERUPS = ['slow', 'shield', 'skip'];
+  function gateDrop(n, rnd = Math.random) {
+    if (n < 6) return null;
+    return rnd() < .14 ? POWERUPS[Math.floor(rnd() * POWERUPS.length)] : null;
+  }
+  // A side that may be locked: one the board doesn't need to reach the target.
+  function lockableSide(board, target, rnd = Math.random) {
+    const need = edgesBetween(board, target) || [];
+    const free = [...Array(board.length).keys()].filter(s => !need.includes(s));
+    return free.length ? free[Math.floor(rnd() * free.length)] : null;
+  }
+
+  // ---------- Daily challenge ----------
+  // Everyone gets the same walls on the same day: the seed and the world come from the local date.
+  function dailyInfo(date = new Date()) {
+    const y = date.getFullYear(), m = date.getMonth() + 1, d = date.getDate();
+    const key = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const day = Math.floor(Date.UTC(y, m - 1, d) / 864e5);
+    return { key, day, seed: day * 2654435761 % 4294967296, world: WORLD_ORDER[day % WORLD_ORDER.length] };
+  }
+  // Streak after playing on `day`, given the last day played and the streak then.
+  const nextStreak = (lastDay, streak, day) => lastDay === day ? streak : lastDay === day - 1 ? streak + 1 : 1;
+
+  // ---------- Unlocks ----------
+  // Triangle is open from the start; each next world opens with a Gates score in the one before.
+  const UNLOCKS = { tri: null, square: { after: 'tri', score: 3000 }, hex: { after: 'square', score: 8000 } };
+  function isUnlocked(worldId, bests) {
+    const u = UNLOCKS[worldId];
+    return !u || (bests[u.after] || 0) >= u.score || (bests[worldId] || 0) > 0;
+  }
+
+  // ---------- Achievements ----------
+  // Each test reads lifetime stats `s` and, when a run has just changed, that run `r`.
+  const ACHIEVEMENTS = [
+    { id: 'first', name: 'Through the gap', desc: 'Clear your first wall.', test: s => s.walls >= 1 },
+    { id: 'combo5', name: 'On a roll', desc: 'Reach a ×5 combo.', test: s => s.bestCombo >= 5 },
+    { id: 'combo10', name: 'Unstoppable', desc: 'Reach the ×10 combo.', test: s => s.bestCombo >= 10 },
+    { id: 'run25', name: 'Long haul', desc: 'Clear 25 walls in one run.', test: s => s.bestRun >= 25 },
+    { id: 'run50', name: 'Marathon', desc: 'Clear 50 walls in one run.', test: s => s.bestRun >= 50 },
+    { id: 'score10k', name: 'Five figures', desc: 'Score 10,000 in one run.', test: s => s.bestScore >= 10000 },
+    { id: 'score50k', name: 'High flyer', desc: 'Score 50,000 in one run.', test: s => s.bestScore >= 50000 },
+    { id: 'clean10', name: 'Clean hands', desc: 'Clear 10 walls in a row without a wasted swipe.', test: s => s.bestClean >= 10 },
+    { id: 'gold', name: 'Gold rush', desc: 'Clear a gold wall.', test: s => s.gold >= 1 },
+    { id: 'blink', name: 'Photographic', desc: 'Clear a blink wall after its holes vanish.', test: s => s.blink >= 1 },
+    { id: 'shield', name: 'Saved', desc: 'Survive a crash with a shield.', test: s => s.shielded >= 1 },
+    { id: 'daily3', name: 'Habit', desc: 'Play the daily challenge 3 days in a row.', test: s => s.dailyStreak >= 3 },
+    { id: 'square', name: 'Back to the square', desc: 'Unlock Carreau.', test: (s, b) => isUnlocked('square', b) },
+    { id: 'hex', name: 'Into the hive', desc: 'Unlock Ruche.', test: (s, b) => isUnlocked('hex', b) },
+  ];
+  const STAT_KEYS = ['runs', 'walls', 'crashes', 'clean', 'bestCombo', 'bestRun', 'bestScore', 'bestClean', 'gold', 'blink', 'shielded', 'dailyStreak', 'dailyLast', 'seconds'];
+  const emptyStats = () => Object.fromEntries(STAT_KEYS.map(k => [k, k === 'dailyLast' ? -1 : 0]));
+  // Achievements met now that weren't in `have`.
+  const newAchievements = (have, stats, bests) => ACHIEVEMENTS.filter(a => !have.includes(a.id) && a.test(stats, bests)).map(a => a.id);
 
   // ---------- Geometry ----------
   // Vertices of a world's polygon with side length = units, centred on 0,0 (y down).
@@ -168,8 +218,9 @@
   }
 
   return {
-    WORLDS, WORLD_ORDER, LEVEL_COUNT, world, initial, clone, same, apply, edgesBetween,
-    randomEdges, seeded, levelDef, starsFor, vertices, piecePolygon, sideForSwipe,
-    gateWall, gateScore, gateScale,
+    WORLDS, WORLD_ORDER, world, initial, clone, same, apply, edgesBetween,
+    randomEdges, seeded, vertices, piecePolygon, sideForSwipe,
+    gateWall, gateScore, gateScale, WALL_KINDS, gateKind, POWERUPS, gateDrop, lockableSide,
+    dailyInfo, nextStreak, UNLOCKS, isUnlocked, ACHIEVEMENTS, STAT_KEYS, emptyStats, newAchievements,
   };
 });

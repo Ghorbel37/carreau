@@ -25,31 +25,37 @@ On the square board that is exactly the notebook rule:
 
 | World | Board | Pieces | Notes |
 | --- | --- | --- | --- |
-| Triangle | triangle | 3 diamond-like corners | 3 swipe directions, no halves to pick. The gentlest. |
+| Triangle | triangle | 3 diamond-like corners | 3 swipe directions, no halves to pick. The gentlest; open from the start. |
 | Carreau | square | 4 rectangles | The original sketch. |
 | Ruche | hexagon | 6 slanted corners | 6 sides on 3 axes. The hardest. |
 
-Each world has its own 30 levels, best scores and stars.
+Each world keeps its own best scores.
 
 Keyboard: number keys work side 1, 2, 3…; on the square board the arrow keys and W A S D work the side they point at. Esc goes back.
 
 ## Modes
 
-- **Gates** (the main mode): walls with holes in a target shape fly at the board, growing as they come closer. Reshape the pieces to fit the holes before a wall arrives; a piece is outlined green once it fits its hole, and the next wall's shape is shown beside the current one. A wall cleared early scores more, a clean clear (no wasted swipe) adds a bonus, and clearing walls in a row multiplies the score (up to ×10). A wall that hits the wrong shape costs one of three lives and resets the combo; every 15 walls cleared gives a life back. Walls get faster and need more swipes as the run goes on.
-- **Rush**: match as many target shapes as you can in 60 seconds. A match in the fewest possible moves gives +3 s, any other match +1 s.
-- **Levels**: 30 fixed puzzles with a move limit. From level 9, two or three targets must be hit in order. Fewest moves earns ★★★, one detour (two extra moves) ★★, otherwise ★. Levels 25–30 must be solved perfectly. Clearing a level unlocks the next.
-- **Memory**: the target shows briefly, then hides. Rebuild it in exactly the minimum number of moves. Three lives.
-- **Zen**: endless targets, no clock.
+- **Gates** (the main mode): walls with holes in a target shape fly at the board, growing as they come closer. Reshape the pieces to fit the holes before a wall arrives; a piece is outlined green once it fits, and the next wall is previewed. Score = 100 + up to 100 for clearing early + 50 for no wasted swipe, times the combo (walls cleared in a row, up to ×10). A crash costs one of three lives and resets the combo; every 15 walls cleared gives a life back. Walls get faster and need more swipes as the run goes on.
+  - **Special walls** (from wall 6): **blink** — the holes close partway, fit them from memory; **locked** — one side is chained and can't be swiped; **gold** — 30% faster, triple points; **double** — the next wall follows close behind.
+  - **Power-ups** ride on some walls (from wall 7); clear the wall to collect: **slow** (walls at half speed for 5 s), **shield** (the next crash costs no life and keeps the combo), **skip** (the current wall vanishes).
+- **Daily**: the same walls for everyone each day, in a world that changes daily (any world, even one you haven't unlocked). The first run of the day counts and builds your streak; later runs are practice.
+- **Rush**: match as many shapes as you can against a 60-second clock.
+- **Zen**: endless shapes, no clock.
+- **How to play**: a three-wall guided tutorial, also shown the first time you play Gates.
 
-Sound (synthesized with Web Audio) and vibration on a correct match can each be switched off with the buttons in the top right. Settings, best scores and level stars are saved on the device. Rush and Memory pause when you leave the app or press Pause; the Android back button steps back one screen and leaves the app from the menu.
+**Worlds unlock in order:** Triangle is open from the start, Carreau opens at 3,000 points in Triangle Gates, Ruche at 8,000 in Carreau.
 
-Every swipe flips exactly one edge, so the number of moves you make always has the same parity as the minimum. That is why star thresholds and level move limits step by two.
+**Stats and achievements** (trophy button): lifetime stats and 14 achievements, which pop up as you earn them.
+
+**Sound:** synthesized effects, plus a generative music loop that speeds up with the walls. Sound, music and vibration (a light tap per swipe, stronger on a match) each have a toggle. Rush and Gates pause when you leave the app; the Android back button steps back one screen and leaves the app from the menu.
+
+Testing aid: `?kinds=gold,locked&drops=,shield` forces the kind and power-up of walls 1, 2, … in Gates.
 
 ## Project layout
 
 | Path | What it is |
 | --- | --- |
-| `www/` | The game: `index.html`, `style.css`, `game.js` (screens, drawing, input), `core.js` (rules and geometry, shared with the tests), self-hosted fonts, icons, web manifest and offline service worker |
+| `www/` | The game: `index.html`, `style.css`, `game.js` (modes, screens, input, progress), `board.js` (SVG board, wall and effects), `audio.js` (sound effects and music), `core.js` (rules, geometry, walls, daily, unlocks, achievements; shared with the tests), self-hosted fonts, icons, web manifest and offline service worker |
 | `android/` | Capacitor Android project (generated by `npx cap add android`, icons from `assets/`) |
 | `assets/` | Source images for the Android icon and splash (`npx @capacitor/assets generate --android`) |
 | `test/unit/` | Rule tests (`node --test`) |

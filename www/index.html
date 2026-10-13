@@ -31,11 +31,25 @@
           <path class="off" d="M16 9.5l5 5M21 9.5l-5 5"/>
         </svg>
       </button>
+      <button class="tog" id="musicBtn" aria-pressed="true" aria-label="Music">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 17.5V5.5l10-2v12"/>
+          <circle cx="6.5" cy="17.5" r="2.5" fill="currentColor"/>
+          <circle cx="16.5" cy="15.5" r="2.5" fill="currentColor"/>
+          <path class="off" d="M3.5 3.5l17 17"/>
+        </svg>
+      </button>
       <button class="tog" id="vibeBtn" aria-pressed="true" aria-label="Vibration">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="8" y="3.5" width="8" height="17" rx="1.8"/>
           <path class="on" d="M4.5 8.5v7M2 10.5v3M19.5 8.5v7M22 10.5v3"/>
           <path class="off" d="M3.5 3.5l17 17"/>
+        </svg>
+      </button>
+      <button class="tog" id="statsBtn" aria-label="Stats and achievements">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M8 4h8v5a4 4 0 0 1-8 0z"/>
+          <path d="M8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8.5 20h7"/>
         </svg>
       </button>
     </div>
@@ -50,17 +64,12 @@
       </div>
       <div class="modes">
         <button class="mode hero" data-mode="gates"><b>Gates</b><span>Walls fly at you. Reshape to fit the holes before they hit.</span><em id="bestGates"></em></button>
-        <button class="mode" data-mode="rush"><b>Rush</b><span>Match as many as you can in 60 s.</span><em id="bestRush"></em></button>
-        <button class="mode" data-mode="levels"><b>Levels</b><span>30 puzzles with a move limit.</span><em id="bestLevels"></em></button>
-        <button class="mode" data-mode="memory"><b>Memory</b><span>See it, it hides, rebuild it.</span><em id="bestMemory"></em></button>
+        <button class="mode" data-mode="daily"><b>Daily</b><span id="dailyWorld"></span><em id="bestDaily"></em></button>
+        <button class="mode" data-mode="rush"><b>Rush</b><span>Match shapes against a 60 s clock.</span><em id="bestRush"></em></button>
         <button class="mode" data-mode="zen"><b>Zen</b><span>No clock. Just shapes.</span><em id="bestZen"></em></button>
+        <button class="mode" id="howTo"><b>How to play</b><span>Three guided walls.</span><em>Tutorial</em></button>
       </div>
       <p class="muted" id="worldBlurb"></p>
-    </div>
-
-    <div class="stack" id="levels" hidden>
-      <div class="head"><strong id="lvlTitle">Levels</strong><span class="muted" id="starTotal"></span><button class="link" data-home>Back</button></div>
-      <div class="lvl-grid" id="lvlGrid"></div>
     </div>
 
     <div class="hud" id="hud" hidden>
@@ -72,8 +81,18 @@
           <div><span class="label" id="l2"></span><b id="v2"></b></div>
         </div>
         <div class="bar" id="bar"><i id="barfill"></i></div>
+        <div class="items" id="items">
+          <button class="chip" id="item-slow" aria-label="Use slow motion">Slow <b>0</b></button>
+          <button class="chip" id="item-shield" aria-label="Shields (used automatically)">Shield <b>0</b></button>
+          <button class="chip" id="item-skip" aria-label="Skip this wall">Skip <b>0</b></button>
+        </div>
         <div class="line"><span id="line"></span><span class="links"><button class="link" id="pause">Pause</button><button class="link" id="quit">Quit</button></span></div>
       </div>
+    </div>
+
+    <div class="stack" id="tut" hidden>
+      <p id="tutText"></p>
+      <div class="line"><span id="tutStep" class="muted"></span><button class="link" id="tutSkip">Skip tutorial</button></div>
     </div>
 
     <div class="stack" id="paused" hidden>
@@ -85,17 +104,29 @@
       <p><strong id="resTitle"></strong></p>
       <div class="stars" id="resStars" hidden></div>
       <p id="resText"></p>
+      <ul class="extra" id="resExtra"></ul>
       <div class="row"><button class="go" id="resMain"></button><button class="ghost" id="resAlt"></button></div>
+    </div>
+
+    <div class="stack" id="stats" hidden>
+      <div class="head"><strong>Stats</strong><button class="link" data-home>Back</button></div>
+      <div class="stat-grid" id="statGrid"></div>
+      <div class="head"><strong>Achievements</strong><span class="muted" id="achCount"></span></div>
+      <ul class="ach" id="achList"></ul>
     </div>
   </section>
 
   <main class="stage" id="stage">
     <svg class="board" id="board" role="group" aria-label="Board"></svg>
+    <div id="flash"></div>
   </main>
   <p class="hint" id="hint"></p>
+  <div class="toast" id="toast" role="status" hidden></div>
 </div>
 
 <script src="core.js"></script>
+<script src="board.js"></script>
+<script src="audio.js"></script>
 <script src="game.js"></script>
 </body>
 </html>

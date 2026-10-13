@@ -1,31 +1,33 @@
 const { test, expect } = require('@playwright/test');
-const { boardState, currentTarget, pathTo, press, solve, swipe, chooseWorld, trackErrors } = require('./helpers');
+const { returning, boardState, currentTarget, pathTo, press, solve, swipe, chooseWorld, trackErrors } = require('./helpers');
 
 // Square world pieces [a, b]: top-left, top-right, bottom-right, bottom-left (see core.js).
 const SKETCH = [[2, 1], [2, 2], [1, 2], [1, 1]];
-const TOP = 0, RIGHT = 1, BOTTOM = 2, LEFT = 3;
+const BOTTOM = 2, LEFT = 3;
+const notNeeded = (path, n = 4) => [...Array(n).keys()].find(e => !path.includes(e));
 
 let errors;
 test.beforeEach(async ({ page }) => { errors = trackErrors(page); });
 test.afterEach(() => { expect(errors, 'no page errors').toEqual([]); });
 
 test.describe('home and controls', () => {
+  test.beforeEach(({ page }) => returning(page));
+
   test('opens on the menu with the sketched square board', async ({ page }) => {
     await page.goto('/');
     await expect(page.locator('#home')).toBeVisible();
     await expect(page.locator('.world')).toHaveText([/Triangle/, /Carreau/, /Ruche/]);
-    await expect(page.locator('.mode')).toHaveText([/Gates/, /Rush/, /Levels/, /Memory/, /Zen/]);
+    await expect(page.locator('.mode')).toHaveText([/Gates/, /Daily/, /Rush/, /Zen/, /How to play/]);
     await expect(page.locator('#board')).toHaveAttribute('data-world', 'square');
     expect(await boardState(page)).toEqual(SKETCH);
-    await expect(page.locator('#board .piece')).toHaveCount(4);
   });
 
   test('square swipes reshape the pair on the side where they start', async ({ page }) => {
     await page.goto('/');
     await swipe(page, .5, .3, 80, 0);           // ⇄ in the top half: widths of the top pair
     let s = await boardState(page);
-    expect(s[0]).toEqual([2, 2]);               // rectangle vertical → carreau grand
-    expect(s[1]).toEqual([1, 2]);               // carreau grand → rectangle vertical
+    expect(s[0]).toEqual([2, 2]);
+    expect(s[1]).toEqual([1, 2]);
     expect(s[3]).toEqual(SKETCH[3]);
     await swipe(page, .7, .5, 0, -80);          // ⇅ in the right half: heights of the right pair
     s = await boardState(page);
@@ -35,43 +37,36 @@ test.describe('home and controls', () => {
     expect(await boardState(page)).toEqual(s);
   });
 
-  test('side arrows work like swipes', async ({ page }) => {
+  test('side arrows and arrow keys work like swipes', async ({ page }) => {
     await page.goto('/');
     await page.locator(`#board .edge[data-side="${BOTTOM}"]`).click();
     expect((await boardState(page))[3]).toEqual([2, 1]); // carreau → rectangle horizontal
     await page.locator(`#board .edge[data-side="${LEFT}"]`).click();
     expect((await boardState(page))[3]).toEqual([2, 2]);
+    await page.keyboard.press('ArrowLeft');
+    expect((await boardState(page))[3]).toEqual([2, 1]);
   });
 
-  test('arrow keys work the square sides', async ({ page }) => {
+  test('sound, music and vibration toggles are remembered', async ({ page }) => {
     await page.goto('/');
-    await page.keyboard.press('ArrowUp');
-    expect(await boardState(page)).toEqual([[2, 2], [1, 2], [1, 2], [1, 1]]);
-  });
-
-  test('sound and vibration toggles are remembered', async ({ page }) => {
-    await page.goto('/');
-    await page.locator('#soundBtn').click();
-    await page.locator('#vibeBtn').click();
-    await expect(page.locator('#soundBtn')).toHaveAttribute('aria-pressed', 'false');
-    await expect(page.locator('#vibeBtn')).toHaveAttribute('aria-pressed', 'false');
+    for (const id of ['#soundBtn', '#musicBtn', '#vibeBtn']) await page.locator(id).click();
     await page.reload();
-    await expect(page.locator('#soundBtn')).toHaveAttribute('aria-pressed', 'false');
-    await expect(page.locator('#vibeBtn')).toHaveAttribute('aria-pressed', 'false');
-    await page.locator('#soundBtn').click();
-    await expect(page.locator('#soundBtn')).toHaveAttribute('aria-pressed', 'true');
+    for (const id of ['#soundBtn', '#musicBtn', '#vibeBtn']) await expect(page.locator(id)).toHaveAttribute('aria-pressed', 'false');
+    await page.locator('#musicBtn').click();
+    await expect(page.locator('#musicBtn')).toHaveAttribute('aria-pressed', 'true');
   });
 
-  test('vibrates on a correct match only while vibration is on', async ({ page }) => {
+  test('vibrates lightly on each swipe and more on a match, only while vibration is on', async ({ page }) => {
     await page.addInitScript(() => {
       window.__buzz = [];
       Object.defineProperty(navigator, 'vibrate', { value: p => { window.__buzz.push(p); return true; }, configurable: true });
     });
     await page.goto('/');
     await page.locator('[data-mode=zen]').click();
-    await solve(page);
-    await expect.poll(() => page.evaluate(() => window.__buzz.length)).toBe(1);
-    await page.locator('#vibeBtn').click();               // off (the toggle itself buzzes once as feedback)
+    const path = await solve(page);
+    await expect.poll(() => page.evaluate(() => window.__buzz.length)).toBe(path.length + 1);
+    expect(await page.evaluate(() => window.__buzz.filter(p => p === 6).length)).toBe(path.length);
+    await page.locator('#vibeBtn').click();
     const after = await page.evaluate(() => window.__buzz.length);
     await page.waitForTimeout(400);
     await solve(page);
@@ -80,123 +75,163 @@ test.describe('home and controls', () => {
   });
 });
 
+test.describe('new players', () => {
+  test('start on Triangle with the other worlds locked', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('#board')).toHaveAttribute('data-world', 'tri');
+    await expect(page.locator('.world[data-world=square]')).toHaveClass(/locked/);
+    await expect(page.locator('.world[data-world=square] em')).toHaveText('3,000 in Triangle');
+    await expect(page.locator('.world[data-world=hex] em')).toHaveText('8,000 in Carreau');
+    await page.locator('.world[data-world=square]').click();
+    await expect(page.locator('#hint')).toHaveText(/score 3,000 in Triangle Gates to unlock Carreau/);
+    await expect(page.locator('#board')).toHaveAttribute('data-world', 'tri');
+  });
+
+  test('get a guided tutorial the first time they play Gates', async ({ page }) => {
+    await page.clock.install();
+    await page.goto('/');
+    await page.locator('[data-mode=gates]').click();
+    await expect(page.locator('#tut')).toBeVisible();
+    for (let step = 1; step <= 3; step++) {
+      await expect(page.locator('#tutStep')).toHaveText(`Step ${step} of 3`);
+      await page.clock.runFor(20_000); // tutorial walls wait for you
+      const path = await pathTo(page, await currentTarget(page));
+      await expect(page.locator('#board .guide')).toHaveAttribute('visibility', 'visible');
+      await expect(page.locator(`#board .edge[data-side="${path[0]}"]`)).toHaveClass(/hint/);
+      await press(page, path);
+      await page.clock.runFor(500);
+    }
+    await expect(page.locator('#resTitle')).toHaveText('You’re ready.');
+    await page.locator('#resMain').click();
+    await expect(page.locator('#hud')).toBeVisible();
+    await page.locator('#quit').click();
+    await page.reload();
+    await page.locator('[data-mode=gates]').click();
+    await expect(page.locator('#hud')).toBeVisible(); // straight to the game now
+  });
+
+  test('unlock Carreau with 3,000 points in Triangle', async ({ page }) => {
+    await page.clock.install();
+    await page.addInitScript(() => localStorage.setItem('carreau-settings', localStorage.getItem('carreau-settings') || JSON.stringify({ tutorialDone: true })));
+    await page.goto('/?kinds=&drops=');
+    await page.locator('[data-mode=gates]').click();
+    while (Number((await page.locator('#v0').textContent()).replace(/,/g, '')) < 3000) {
+      await solve(page);
+      await page.clock.runFor(500);
+    }
+    for (let i = 0; i < 3; i++) await page.clock.runFor(8_000);
+    await expect(page.locator('#result')).toBeVisible();
+    await expect(page.locator('#resExtra')).toContainText('Carreau unlocked');
+    await page.locator('#resAlt').click();
+    await expect(page.locator('.world[data-world=square]')).not.toHaveClass(/locked/);
+    await expect(page.locator('.world[data-world=hex]')).toHaveClass(/locked/);
+    await chooseWorld(page, 'square');
+  });
+
+  test('keep square scores saved by earlier versions, with Carreau open', async ({ page }) => {
+    await page.addInitScript(() => {
+      if (!localStorage.getItem('carreau-save')) {
+        localStorage.setItem('carreau-levels', JSON.stringify({ 1: 3 }));
+        localStorage.setItem('carreau-bests', JSON.stringify({ rush: 7, memory: 2, zen: 4 }));
+      }
+    });
+    await page.goto('/');
+    await chooseWorld(page, 'square');
+    await expect(page.locator('#bestRush')).toHaveText('Best 7');
+    await expect(page.locator('#bestZen')).toHaveText('Best run 4');
+  });
+});
+
 test.describe('worlds', () => {
+  test.beforeEach(({ page }) => returning(page));
+
   for (const [id, sides] of [['tri', 3], ['hex', 6]]) {
     test(`${id}: has ${sides} corners, swipes along each side, and is remembered`, async ({ page }) => {
       await page.goto('/');
       await chooseWorld(page, id);
       await expect(page.locator('#board .piece')).toHaveCount(sides);
       await expect(page.locator('#board .edge')).toHaveCount(sides);
-      // Swipe along every side, starting on its half, and check that side changed.
       for (let s = 0; s < sides; s++) {
         const before = await boardState(page);
         const geo = await page.evaluate(([w, side]) => {
-          const v = window.CarreauCore.vertices(w), A = v[side], B = v[(side + 1) % v.length];
-          return { A, B, R: Math.max(...v.map(p => Math.hypot(p[0], p[1]))) };
+          const v = window.CarreauCore.vertices(w);
+          return { A: v[side], B: v[(side + 1) % v.length] };
         }, [id, s]);
         const box = await page.locator('#board').boundingBox();
         const [vx, vy, vw, vh] = (await page.getAttribute('#board', 'viewBox')).split(' ').map(Number);
-        const vb = { x: vx, y: vy, width: vw, height: vh };
-        const toPx = ([x, y]) => [box.x + (x - vb.x) / vb.width * box.width, box.y + (y - vb.y) / vb.height * box.height];
-        const mid = [(geo.A[0] + geo.B[0]) / 2 * .5, (geo.A[1] + geo.B[1]) / 2 * .5];
-        const [sx, sy] = toPx(mid);
+        const toPx = ([x, y]) => [box.x + (x - vx) / vw * box.width, box.y + (y - vy) / vh * box.height];
+        const [sx, sy] = toPx([(geo.A[0] + geo.B[0]) / 4, (geo.A[1] + geo.B[1]) / 4]);
         const len = Math.hypot(geo.B[0] - geo.A[0], geo.B[1] - geo.A[1]);
-        const dir = [(geo.B[0] - geo.A[0]) / len * 60, (geo.B[1] - geo.A[1]) / len * 60];
         await page.mouse.move(sx, sy); await page.mouse.down();
-        await page.mouse.move(sx + dir[0], sy + dir[1]); await page.mouse.up();
-        const after = await boardState(page);
+        await page.mouse.move(sx + (geo.B[0] - geo.A[0]) / len * 60, sy + (geo.B[1] - geo.A[1]) / len * 60); await page.mouse.up();
         const expected = await page.evaluate(([st, side]) => window.CarreauCore.apply(st, side), [before, s]);
-        expect(after, `swipe along side ${s}`).toEqual(expected);
+        expect(await boardState(page), `swipe along side ${s}`).toEqual(expected);
       }
       await page.reload();
       await expect(page.locator('#board')).toHaveAttribute('data-world', id);
-      await expect(page.locator(`.world[data-world=${id}]`)).toHaveAttribute('aria-pressed', 'true');
     });
 
-    test(`${id}: levels have their own progress`, async ({ page }) => {
-      await page.goto('/');
+    test(`${id}: Gates works here too`, async ({ page }) => {
+      await page.clock.install();
+      await page.goto('/?kinds=&drops=');
       await chooseWorld(page, id);
-      await page.locator('[data-mode=levels]').click();
-      await expect(page.locator('#lvlTitle')).toHaveText(id === 'tri' ? 'Triangle levels' : 'Ruche levels');
-      await page.locator('.lvl').nth(0).click();
-      await solve(page);
-      await expect(page.locator('#resTitle')).toHaveText('Level 1 cleared');
-      await page.locator('#resMain').click();
-      await expect(page.locator('#v0')).toHaveText('2');
+      await page.locator('[data-mode=gates]').click();
+      for (let i = 0; i < 5; i++) { await solve(page); await page.clock.runFor(600); }
+      await expect(page.locator('#v1')).toHaveText('×5');
       await page.locator('#quit').click();
-      await expect(page.locator('.lvl').nth(1)).toBeEnabled();
-      await page.locator('[data-home]').click();
-      await expect(page.locator(`.world[data-world=${id}] em`)).toHaveText('★ 3');
-      await expect(page.locator('.world[data-world=square] em')).toHaveText('★ 0');
+      await expect(page.locator('#board .wall')).toHaveAttribute('visibility', 'hidden');
     });
   }
-
-  test('hex Rush plays with up to 5-move targets', async ({ page }) => {
-    await page.clock.install();
-    await page.goto('/');
-    await chooseWorld(page, 'hex');
-    await page.locator('[data-mode=rush]').click();
-    for (let i = 0; i < 10; i++) {
-      const path = await solve(page);
-      expect(path.length).toBeLessThanOrEqual(5);
-      await page.clock.runFor(400);
-    }
-    await expect(page.locator('#v0')).toHaveText('10');
-  });
 });
 
 test.describe('Gates', () => {
-  test('clearing walls scores, builds a combo and swaps in the next wall', async ({ page }) => {
+  test.beforeEach(({ page }) => returning(page));
+  const start = async (page, query = '?kinds=&drops=') => {
     await page.clock.install();
-    await page.goto('/');
+    await page.goto('/' + query);
     await page.locator('[data-mode=gates]').click();
     await expect(page.locator('#hud')).toBeVisible();
-    await expect(page.locator('#targets .mini')).toHaveCount(2);
+  };
+  const score = async page => Number((await page.locator('#v0').textContent()).replace(/,/g, ''));
+
+  test('clearing walls scores, builds a combo, pops points and swaps in the next wall', async ({ page }) => {
+    await start(page);
     const next = await page.$eval('#targets .next svg', el => el.dataset.state);
     await page.clock.runFor(500);
     await solve(page);
     await expect(page.locator('#v1')).toHaveText('×1');
-    const first = Number(await page.locator('#v0').textContent());
-    expect(first).toBeGreaterThan(150); // early and clean
+    await expect(page.locator('.float')).toHaveText(/^\+\d/);
+    const first = await score(page);
+    expect(first).toBeGreaterThan(150);
     await page.clock.runFor(600);
     expect(await page.$eval('#targets .cur svg', el => el.dataset.state)).toBe(next);
     await solve(page);
     await expect(page.locator('#v1')).toHaveText('×2');
-    expect(Number(await page.locator('#v0').textContent())).toBeGreaterThan(first * 2);
+    expect(await score(page)).toBeGreaterThan(first * 2);
   });
 
   test('pieces that fit their hole are marked', async ({ page }) => {
-    await page.clock.install();
-    await page.goto('/');
-    await page.locator('[data-mode=gates]').click();
-    const target = await currentTarget(page);
-    const board = await boardState(page);
-    const fits = target.map((p, i) => p[0] === board[i][0] && p[1] === board[i][1]);
+    await start(page);
+    const target = await currentTarget(page), board = await boardState(page);
     const marked = await page.$$eval('#board .piece', ps => ps.map(p => p.classList.contains('fit')));
-    expect(marked).toEqual(fits);
+    expect(marked).toEqual(target.map((p, i) => p[0] === board[i][0] && p[1] === board[i][1]));
   });
 
   test('a wall that hits the wrong shape costs a life; three crashes end the run', async ({ page }) => {
-    await page.clock.install();
-    await page.goto('/');
-    await page.locator('[data-mode=gates]').click();
-    for (const hearts of ['♥♥♡', '♥♡♡']) {
+    await start(page);
+    for (const h of ['♥♥♡', '♥♡♡']) {
       await page.clock.runFor(6_000);
-      await expect(page.locator('#v2')).toHaveText(hearts);
-      await expect(page.locator('#v1')).toHaveText('×1');
+      await expect(page.locator('#v2')).toHaveText(h);
       await page.clock.runFor(1_000);
     }
     await page.clock.runFor(7_000);
-    await expect(page.locator('#result')).toBeVisible();
-    await expect(page.locator('#resTitle')).toHaveText("Crashed out.");
+    await expect(page.locator('#resTitle')).toHaveText('Crashed out.');
     await page.locator('#resAlt').click();
     await expect(page.locator('#bestGates')).toHaveText('New');
   });
 
   test('pausing freezes the wall', async ({ page }) => {
-    await page.clock.install();
-    await page.goto('/');
-    await page.locator('[data-mode=gates]').click();
+    await start(page);
     await page.clock.runFor(1_000);
     await page.locator('#pause').click();
     await page.clock.runFor(20_000);
@@ -206,40 +241,132 @@ test.describe('Gates', () => {
     await expect(page.locator('#v2')).toHaveText('♥♥♡');
   });
 
-  for (const id of ['tri', 'hex']) {
-    test(`${id}: walls work in this world too`, async ({ page }) => {
-      await page.clock.install();
-      await page.goto('/');
-      await chooseWorld(page, id);
-      await page.locator('[data-mode=gates]').click();
-      for (let i = 0; i < 5; i++) {
-        await solve(page);
-        await page.clock.runFor(600);
-      }
-      await expect(page.locator('#v1')).toHaveText('×5');
-      await page.locator('#quit').click();
-      await expect(page.locator('#home')).toBeVisible();
-      await expect(page.locator('#board .wall')).toHaveAttribute('visibility', 'hidden');
-    });
-  }
+  test('gold walls are worth triple', async ({ page }) => {
+    await start(page, '?kinds=gold&drops=');
+    await expect(page.locator('#board .wall')).toHaveClass(/gold/);
+    await solve(page);
+    expect(await score(page)).toBeGreaterThan(3 * 200);
+  });
+
+  test('locked walls chain a side the board does not need', async ({ page }) => {
+    await start(page, '?kinds=locked&drops=');
+    const lock = Number(await page.locator('#board .edge.locked').getAttribute('data-side'));
+    const path = await pathTo(page, await currentTarget(page));
+    expect(path).not.toContain(lock);
+    const before = await boardState(page);
+    await press(page, [lock]);
+    expect(await boardState(page)).toEqual(before);
+    await expect(page.locator('#hint')).toHaveText('that side is locked');
+    await press(page, path);
+    await expect(page.locator('#v1')).toHaveText('×1');
+  });
+
+  test('blink walls close their holes partway; clearing one earns an achievement', async ({ page }) => {
+    await start(page, '?kinds=blink&drops=');
+    const target = await currentTarget(page);
+    await page.clock.runFor(2_400);
+    await expect(page.locator('#targets .cur')).toHaveClass(/veil/);
+    await expect(page.locator('#board .wall .holes')).toHaveAttribute('visibility', 'hidden');
+    await press(page, await pathTo(page, target));
+    await expect(page.locator('#toast')).toContainText('Photographic');
+  });
+
+  test('a double wall sends the next one in close behind', async ({ page }) => {
+    await start(page, '?kinds=double,&drops=');
+    await solve(page);
+    await page.clock.runFor(500);
+    const scale = await page.$eval('#barfill', el => Number(el.style.transform.match(/scaleX\(([\d.]+)\)/)[1]));
+    expect(scale).toBeLessThan(.62);
+  });
+
+  test('a shield takes a crash and keeps the combo', async ({ page }) => {
+    await start(page, '?kinds=&drops=shield');
+    await solve(page);
+    await expect(page.locator('#item-shield b')).toHaveText('1');
+    await page.clock.runFor(8_000);
+    await expect(page.locator('#v2')).toHaveText('♥♥♥');
+    await expect(page.locator('#item-shield b')).toHaveText('0');
+    await expect(page.locator('#v1')).toHaveText('×1');
+  });
+
+  test('slow motion holds the wall back; skip removes it', async ({ page }) => {
+    await start(page, '?kinds=&drops=slow,skip');
+    await solve(page); await page.clock.runFor(600);
+    await solve(page); await page.clock.runFor(600);
+    await expect(page.locator('#item-slow b')).toHaveText('1');
+    await expect(page.locator('#item-skip b')).toHaveText('1');
+    await page.locator('#item-slow').click();
+    await expect(page.locator('#stage')).toHaveClass(/slow/);
+    await page.clock.runFor(4_500); // a normal wall would have hit by now
+    await expect(page.locator('#v2')).toHaveText('♥♥♥');
+    await page.locator('#item-skip').click();
+    await page.clock.runFor(800);
+    await expect(page.locator('#item-skip b')).toHaveText('0');
+    await expect(page.locator('#v2')).toHaveText('♥♥♥');
+    await expect(page.locator('#v1')).toHaveText('×2');
+    await expect(page.locator('#line')).toHaveText(/^Wall 4/);
+  });
+
+  test('achievements pop up as you play and show in Stats', async ({ page }) => {
+    await start(page);
+    await solve(page);
+    await expect(page.locator('#toast')).toContainText('Through the gap');
+    await page.locator('#quit').click();
+    await page.locator('#statsBtn').click();
+    await expect(page.locator('#stats')).toBeVisible();
+    // This profile has every world open, so the two unlock achievements are earned too.
+    await expect(page.locator('#achCount')).toHaveText(/^3 \/ \d+$/);
+    await expect(page.locator('#achList li.done')).toHaveText([/Through the gap/, /Back to the square/, /Into the hive/]);
+    await expect(page.locator('#statGrid')).toContainText('Walls cleared');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#home')).toBeVisible();
+  });
+});
+
+test.describe('Daily', () => {
+  test.beforeEach(({ page }) => returning(page));
+
+  test('is the same for everyone on a day, counts once, and keeps a streak', async ({ page, browser }) => {
+    const day = new Date('2026-10-13T10:00:00');
+    await page.clock.install({ time: day });
+    await page.goto('/?kinds=&drops=');
+    const info = await page.evaluate(() => window.CarreauCore.dailyInfo());
+    await expect(page.locator('#dailyWorld')).toHaveText(`Today: ${info.world === 'tri' ? 'Triangle' : info.world === 'square' ? 'Carreau' : 'Ruche'}.`);
+    await page.locator('[data-mode=daily]').click();
+    await expect(page.locator('#board')).toHaveAttribute('data-world', info.world);
+    const first = await currentTarget(page);
+
+    // Another player on the same day sees the same first wall.
+    const other = await browser.newContext();
+    const p2 = await other.newPage();
+    await p2.clock.install({ time: day });
+    await p2.goto(page.url());
+    await p2.locator('[data-mode=daily]').click();
+    expect(await currentTarget(p2)).toEqual(first);
+    await other.close();
+
+    await solve(page);
+    for (let i = 0; i < 3; i++) await page.clock.runFor(8_000);
+    await expect(page.locator('#resTitle')).toHaveText('Daily done.');
+    await expect(page.locator('#resText')).toContainText('Streak: 1 day');
+    await page.locator('#resAlt').click();
+    await expect(page.locator('#bestDaily')).toHaveText(/^Done: [\d,]+ · streak 1$/);
+    await page.locator('[data-mode=daily]').click();
+    await expect(page.locator('#hint')).toHaveText(/practice/);
+  });
 });
 
 test.describe('Rush', () => {
+  test.beforeEach(({ page }) => returning(page));
+
   test('scores matches, adds time and ends when the clock runs out', async ({ page }) => {
     await page.clock.install();
     await page.goto('/');
     await page.locator('[data-mode=rush]').click();
-    await expect(page.locator('#hud')).toBeVisible();
-    for (let i = 0; i < 3; i++) {
-      await solve(page);
-      await page.clock.runFor(400);
-    }
+    for (let i = 0; i < 3; i++) { await solve(page); await page.clock.runFor(400); }
     await expect(page.locator('#v0')).toHaveText('3');
     await expect(page.locator('#v1')).toHaveText('3');
-    await page.clock.runFor(30_000);
-    await expect(page.locator('#v2')).toHaveText(/^(2\d|3\d)$/);
-    await page.clock.runFor(35_000);
-    await expect(page.locator('#result')).toBeVisible();
+    await page.clock.runFor(65_000);
     await expect(page.locator('#resTitle')).toHaveText('New best!');
     await expect(page.locator('#resText')).toContainText('3 shapes matched');
     await page.locator('#resAlt').click();
@@ -252,14 +379,12 @@ test.describe('Rush', () => {
     await page.locator('[data-mode=rush]').click();
     await page.clock.runFor(5_000);
     await page.locator('#pause').click();
-    await expect(page.locator('#paused')).toBeVisible();
     const time = await page.locator('#v2').textContent();
     const board = await boardState(page);
     await page.clock.runFor(30_000);
     await page.keyboard.press('1');
     expect(await boardState(page)).toEqual(board);
     await page.locator('#resume').click();
-    await expect(page.locator('#hud')).toBeVisible();
     await expect(page.locator('#v2')).toHaveText(time);
     await page.clock.runFor(2_000);
     expect(Number(await page.locator('#v2').textContent())).toBeLessThan(Number(time));
@@ -286,11 +411,13 @@ test.describe('Rush', () => {
 });
 
 test.describe('Zen', () => {
+  test.beforeEach(({ page }) => returning(page));
+
   test('has no clock and keeps the best run', async ({ page }) => {
     await page.goto('/');
     await page.locator('[data-mode=zen]').click();
     await expect(page.locator('#bar')).toBeHidden();
-    await expect(page.locator('#pause')).toBeHidden();
+    await expect(page.locator('#items')).toBeHidden();
     for (let i = 0; i < 2; i++) {
       await solve(page);
       await expect(page.locator('#v0')).toHaveText(String(i + 1));
@@ -298,113 +425,5 @@ test.describe('Zen', () => {
     }
     await page.locator('#quit').click();
     await expect(page.locator('#bestZen')).toHaveText('Best run 2');
-  });
-});
-
-test.describe('Memory', () => {
-  test('hides the target, rewards a rebuild and takes a life for a miss', async ({ page }) => {
-    await page.clock.install();
-    await page.goto('/');
-    await page.locator('[data-mode=memory]').click();
-
-    // Round 1: input is locked while memorizing; then rebuild the shape.
-    let target = await currentTarget(page);
-    await page.keyboard.press('1');
-    expect(await boardState(page)).toEqual(SKETCH);
-    await page.clock.runFor(2_000);
-    await expect(page.locator('#targets .cur')).toHaveClass(/veil/);
-    await press(page, await pathTo(page, target));
-    await expect(page.locator('#v0')).toHaveText('1');
-    await page.clock.runFor(700);
-
-    // Then miss until out of lives: exactly as many moves as needed, never the right set.
-    for (let lives = 2; lives >= 0; lives--) {
-      target = await currentTarget(page);
-      const right = await pathTo(page, target);
-      await page.clock.runFor(2_000);
-      const wrong = [0, 1, 2, 3].find(e => !right.includes(e)) ?? right[0];
-      await press(page, Array(right.length).fill(wrong));
-      await expect(page.locator('#v1')).toHaveText('♥'.repeat(lives) + '♡'.repeat(3 - lives));
-      await page.clock.runFor(1_500);
-    }
-    await expect(page.locator('#result')).toBeVisible();
-    await expect(page.locator('#resText')).toContainText('1 shapes rebuilt');
-  });
-
-  test('pausing while memorizing gives the full viewing time back', async ({ page }) => {
-    await page.clock.install();
-    await page.goto('/');
-    await page.locator('[data-mode=memory]').click();
-    await page.clock.runFor(1_000);
-    await page.locator('#pause').click();
-    await page.clock.runFor(10_000);
-    await page.locator('#resume').click();
-    await expect(page.locator('#targets .cur')).not.toHaveClass(/veil/);
-    await page.clock.runFor(1_000);
-    await expect(page.locator('#targets .cur')).toHaveClass(/veil/);
-  });
-});
-
-test.describe('Levels', () => {
-  test('clears levels in order, earns stars and unlocks the next', async ({ page }) => {
-    await page.goto('/');
-    await page.locator('[data-mode=levels]').click();
-    await expect(page.locator('#lvlTitle')).toHaveText('Carreau levels');
-    await expect(page.locator('.lvl').nth(0)).toBeEnabled();
-    await expect(page.locator('.lvl').nth(1)).toBeDisabled();
-    await page.locator('.lvl').nth(0).click();
-
-    for (let n = 1; n <= 9; n++) {
-      await expect(page.locator('#v0')).toHaveText(String(n));
-      const targets = await page.locator('#targets .mini').count();
-      expect(targets).toBe(n <= 8 ? 1 : 2);
-      for (let t = 0; t < targets; t++) await solve(page);
-      await expect(page.locator('#resTitle')).toHaveText(`Level ${n} cleared`);
-      await expect(page.locator('#resStars')).toHaveText('★★★');
-      if (n < 9) await page.locator('#resMain').click();
-    }
-    await page.locator('#resAlt').click();
-    await expect(page.locator('#starTotal')).toHaveText('★ 27 / 90');
-    await expect(page.locator('.lvl').nth(9)).toBeEnabled();
-    await expect(page.locator('.lvl').nth(10)).toBeDisabled();
-  });
-
-  test('runs out of moves and offers a retry', async ({ page }) => {
-    await page.goto('/');
-    await page.locator('[data-mode=levels]').click();
-    await page.locator('.lvl').nth(0).click();
-    const right = await pathTo(page, await currentTarget(page));
-    const wrong = [0, 1, 2, 3].find(e => !right.includes(e));
-    const budget = Number((await page.locator('#v2').textContent()).split('/')[1]);
-    await press(page, Array(budget).fill(wrong));
-    await expect(page.locator('#resTitle')).toHaveText('Out of moves.');
-    await page.locator('#resMain').click();
-    await expect(page.locator('#v2')).toHaveText(`0/${budget}`);
-  });
-
-  for (const [detours, earned] of [[1, 2], [2, 1]]) {
-    test(`${detours} detour${detours > 1 ? 's' : ''} earn${detours > 1 ? '' : 's'} ${earned} star${earned > 1 ? 's' : ''}`, async ({ page }) => {
-      await page.goto('/');
-      await page.locator('[data-mode=levels]').click();
-      await page.locator('.lvl').nth(0).click();
-      const right = await pathTo(page, await currentTarget(page));
-      const wrong = [0, 1, 2, 3].find(e => !right.includes(e));
-      await press(page, [...Array(detours * 2).fill(wrong), ...right]);
-      await expect(page.locator('#resTitle')).toHaveText('Level 1 cleared');
-      const lit = await page.locator('#resStars').evaluate(el => el.firstChild.textContent);
-      expect(lit).toBe('★'.repeat(earned));
-    });
-  }
-
-  test('keeps square progress saved before worlds existed', async ({ page }) => {
-    await page.addInitScript(() => {
-      if (!localStorage.getItem('carreau-progress')) {
-        localStorage.setItem('carreau-levels', JSON.stringify({ 1: 3, 2: 2 }));
-        localStorage.setItem('carreau-bests', JSON.stringify({ rush: 7, memory: 2, zen: 4 }));
-      }
-    });
-    await page.goto('/');
-    await expect(page.locator('#bestRush')).toHaveText('Best 7');
-    await expect(page.locator('#bestLevels')).toHaveText('★ 5 / 90');
   });
 });

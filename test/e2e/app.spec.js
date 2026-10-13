@@ -32,12 +32,13 @@ test.describe('inside the Capacitor app', () => {
   });
   const calls = (page, plugin) => page.evaluate(p => window.__native.filter(c => c[0] === p), plugin);
 
-  test('uses native haptics', async ({ page }) => {
+  test('uses native haptics: a light tap per swipe, more on a match', async ({ page }) => {
     await page.goto('/');
     await page.locator('[data-mode=zen]').click();
-    await solve(page);
-    await expect.poll(async () => (await calls(page, 'Haptics')).length).toBe(1);
-    expect((await calls(page, 'Haptics'))[0][1]).toBe('impact');
+    const path = await solve(page);
+    await expect.poll(async () => (await calls(page, 'Haptics')).length).toBe(path.length + 1);
+    const all = await calls(page, 'Haptics');
+    expect(all.slice(0, path.length).every(c => c[1] === 'impact' && c[2].style === 'LIGHT')).toBe(true);
   });
 
   test('sets status bar icons for the theme', async ({ page }) => {
@@ -48,7 +49,8 @@ test.describe('inside the Capacitor app', () => {
 
   test('the back button steps back, then leaves the app from the menu', async ({ page }) => {
     await page.goto('/');
-    await page.locator('[data-mode=levels]').click();
+    await page.locator('#statsBtn').click();
+    await expect(page.locator('#stats')).toBeVisible();
     await page.evaluate(() => window.__back());
     await expect(page.locator('#home')).toBeVisible();
     await page.locator('[data-mode=zen]').click();

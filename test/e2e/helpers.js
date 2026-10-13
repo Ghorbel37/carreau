@@ -45,4 +45,14 @@ function trackErrors(page) {
   return errors;
 }
 
-module.exports = { readState, boardState, currentTarget, pathTo, press, solve, swipe, chooseWorld, trackErrors };
+// Start as a returning player: tutorial done, every world open, on the given world.
+// Seeds only an empty profile, so reloads keep what the test did.
+async function returning(page, worldId = 'square') {
+  await page.addInitScript(w => {
+    if (localStorage.getItem('carreau-settings')) return;
+    localStorage.setItem('carreau-settings', JSON.stringify({ tutorialDone: true, world: w }));
+    localStorage.setItem('carreau-save', JSON.stringify({ bests: {}, unlocked: ['tri', 'square', 'hex'] }));
+  }, worldId);
+}
+
+module.exports = { returning, readState, boardState, currentTarget, pathTo, press, solve, swipe, chooseWorld, trackErrors };
