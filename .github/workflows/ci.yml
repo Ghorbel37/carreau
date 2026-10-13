@@ -80,6 +80,9 @@ jobs:
           name: carreau-v${{ env.VERSION }}
           path: carreau-v${{ env.VERSION }}.apk
           retention-days: 30
+      - name: Write the release notes
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: bash .github/release-notes.sh "$VERSION" "${{ github.sha }}" latest
       - name: Publish as the latest release (one-tap download on the phone)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v3
@@ -92,13 +95,7 @@ jobs:
           files: |
             carreau-v${{ env.VERSION }}.apk
             carreau.apk
-          body: |
-            **Version ${{ env.VERSION }}** (Android versionCode ${{ github.run_number }}), built from `${{ github.ref_name }}` @ ${{ github.sha }}.
-
-            Install on Android: download `carreau.apk` on the phone, open it, and allow installs from this source when asked.
-            New builds install over this one and keep your progress.
-
-            Play in the browser: https://ghorbel37.github.io/carreau/
+          body_path: release-notes.md
 
   pages:
     name: Web version (GitHub Pages)

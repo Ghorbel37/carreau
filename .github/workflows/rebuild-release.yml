@@ -1,7 +1,7 @@
 name: Rebuild release
 
 # Rebuild the APK of an earlier commit and publish it as release v1.1.<build>,
-# e.g. to replace the old build-N releases. It never becomes the "latest" release.
+# e.g. to replace the old build-N releases. It becomes the "latest" release only when asked.
 on:
   workflow_dispatch:
     inputs:
@@ -11,6 +11,14 @@ on:
       build:
         description: Build number (the release becomes v1.1.<build>, versionCode <build>)
         required: true
+      latest:
+        description: Mark it as the latest release
+        type: boolean
+        default: false
+      replaces:
+        description: Old release (tag) to delete once this one is published, e.g. build-2
+        required: false
+        default: ''
 
 jobs:
   rebuild:
@@ -23,9 +31,21 @@ jobs:
       VERSION: 1.1.${{ inputs.build }}
       CARREAU_BUILD: ${{ inputs.build }}
     steps:
+      # The release tag must already exist on the commit (GitHub doesn't let workflows tag older commits
+      # whose workflow files differ from today's), so push it first: git tag v1.1.N <commit> && git push origin v1.1.N
+      - name: Check the tag
+        run: |
+          sha=$(git ls-remote https://github.com/${{ github.repository }} "refs/tags/v$VERSION" | cut -f1)
+          [ -n "$sha" ] || { echo "Push tag v$VERSION on ${{ inputs.ref }} first"; exit 1; }
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref }}
+      # Today's tools (release notes) from main, with full history to read the commit message.
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          path: .tools
+          fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
           node-version: 24
@@ -54,14 +74,19 @@ jobs:
           "$aapt" dump badging "$apk" | grep -q "versionName='$VERSION'" || { echo "APK version is not $VERSION"; exit 1; }
           "$(dirname "$aapt")/apksigner" verify --print-certs "$apk" | grep "Carreau test build"
           cp "$apk" "carreau-v$VERSION.apk"
+      - name: Write the release notes
+        run: |
+          (cd .tools && bash .github/release-notes.sh "$VERSION" "${{ inputs.ref }}" ${{ inputs.latest && 'latest' || '' }})
+          mv .tools/release-notes.md .
       - uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ env.VERSION }}
           name: Carreau v${{ env.VERSION }}
-          target_commitish: ${{ inputs.ref }}
-          make_latest: false
+          make_latest: ${{ inputs.latest }}
           files: carreau-v${{ env.VERSION }}.apk
-          body: |
-            **Version ${{ env.VERSION }}** (Android versionCode ${{ inputs.build }}), rebuilt from commit ${{ inputs.ref }}.
-
-            An older build. The newest one is always at https://github.com/Ghorbel37/carreau/releases/latest/download/carreau.apk
+          body_path: release-notes.md
+      - name: Remove the release it replaces
+        if: inputs.replaces != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release delete "${{ inputs.replaces }}" --repo "${{ github.repository }}" --yes
