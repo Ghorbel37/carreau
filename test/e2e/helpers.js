@@ -61,4 +61,10 @@ async function quitToMenu(page) {
   await page.locator('#pausedQuit').click();
 }
 
-module.exports = { returning, quitToMenu, readState, boardState, currentTarget, pathTo, press, solve, swipe, chooseWorld, trackErrors };
+// A brand-new player sees the welcome card first; skip it.
+async function skipWelcome(page) {
+  await page.locator('#welcomeSkip').click();
+  await page.locator('#home').waitFor();
+}
+
+module.exports = { returning, quitToMenu, skipWelcome, readState, boardState, currentTarget, pathTo, press, solve, swipe, chooseWorld, trackErrors };

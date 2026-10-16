@@ -405,3 +405,11 @@ body.platform-web .app-only { display: none !important; }
 @media (prefers-reduced-motion: reduce) {
   .overlay.screen .card { animation: none; }
 }
+
+/* Welcome card */
+.welcome-board { width: 120px; height: 120px; margin: 0 auto; overflow: visible; }
+.welcome-board .w-outline { fill: none; stroke: var(--ink); stroke-width: .14; }
+.welcome-board .w-piece { fill: url(#hatch); stroke: var(--ink); stroke-width: .1; }
+.welcome-board .w-swipe { fill: none; stroke: var(--green); stroke-width: .16; stroke-linecap: round; stroke-linejoin: round; animation: wswipe 1.6s ease-in-out infinite; }
+@keyframes wswipe { 0%, 100% { transform: translateX(-.4px); opacity: .4; } 50% { transform: translateX(.4px); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .welcome-board .w-swipe { animation: none; } }

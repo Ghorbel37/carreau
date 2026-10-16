@@ -84,7 +84,7 @@
   const boardEl = $('board'), stageEl = $('stage');
   const mainView = new BoardView(boardEl, { arrows: true, animate: true });
   function restart(el, cls) { el.classList.remove(cls); void el.getBoundingClientRect(); el.classList.add(cls); }
-  const SCREENS = ['home', 'hud', 'tut', 'paused', 'result', 'stats'];
+  const SCREENS = ['home', 'hud', 'tut', 'paused', 'result', 'stats', 'welcome'];
   let screen = 'home';
   function show(name) {
     screen = name;
@@ -670,6 +670,7 @@
   // elsewhere step back one screen; on the menu, leave the app.
   function back() {
     if (screen === 'paused') return resume();
+    if (screen === 'welcome') return $('welcomeSkip').click();
     if (G) return pause();
     if (screen !== 'home') return goHome();
     const app = plugin('App');
@@ -761,6 +762,8 @@
     else startGame(m);
   }));
   $('howTo').addEventListener('click', () => startGame('tutorial'));
+  $('welcomeStart').addEventListener('click', () => { audio.ensure(); startGame('tutorial'); });
+  $('welcomeSkip').addEventListener('click', () => { settings.tutorialDone = true; saveSettings(); goHome(); });
   $('statsBtn').addEventListener('click', () => (screen === 'stats' ? goHome() : openStats()));
   document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', goHome));
   $('tutSkip').addEventListener('click', quit);
@@ -853,6 +856,13 @@
   syncToggles();
   mainView.setWorld(settings.world, state);
   goHome();
+  // First launch: a welcome card that offers the guided tutorial straight away.
+  // Players with progress from earlier versions count as returning.
+  const hasProgress = save.stats.runs > 0 || save.stats.walls > 0 || WORLD_ORDER.some(w => Object.values(save.bests[w]).some(v => v > 0));
+  if (!settings.tutorialDone && !hasProgress) {
+    show('welcome');
+    say('');
+  }
 
   // Offline support on the web (the app already ships its files).
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !isApp) {

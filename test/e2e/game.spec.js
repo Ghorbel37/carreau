@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { returning, quitToMenu, boardState, currentTarget, pathTo, press, solve, swipe, chooseWorld, trackErrors } = require('./helpers');
+const { returning, quitToMenu, skipWelcome, boardState, currentTarget, pathTo, press, solve, swipe, chooseWorld, trackErrors } = require('./helpers');
 
 // Square world pieces [a, b]: top-left, top-right, bottom-right, bottom-left (see core.js).
 const SKETCH = [[2, 1], [2, 2], [1, 2], [1, 1]];
@@ -76,8 +76,21 @@ test.describe('home and controls', () => {
 });
 
 test.describe('new players', () => {
+  test('see a welcome card first; Skip goes to the menu and it does not come back', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('#welcome')).toBeVisible();
+    await expect(page.locator('#home')).toBeHidden();
+    await skipWelcome(page);
+    await page.reload();
+    await expect(page.locator('#welcome')).toBeHidden();
+    await expect(page.locator('#home')).toBeVisible();
+    await page.locator('[data-mode=gates]').click();
+    await expect(page.locator('#hud')).toBeVisible(); // skipping also skips the tutorial
+  });
+
   test('start on Triangle with the other worlds locked', async ({ page }) => {
     await page.goto('/');
+    await skipWelcome(page);
     await expect(page.locator('#board')).toHaveAttribute('data-world', 'tri');
     await expect(page.locator('.world[data-world=square]')).toHaveClass(/locked/);
     await expect(page.locator('.world[data-world=square] em')).toHaveText('25,000 in Triangle');
@@ -87,10 +100,10 @@ test.describe('new players', () => {
     await expect(page.locator('#board')).toHaveAttribute('data-world', 'tri');
   });
 
-  test('get a guided tutorial the first time they play Gates', async ({ page }) => {
+  test('get the guided tutorial from the welcome card', async ({ page }) => {
     await page.clock.install();
     await page.goto('/');
-    await page.locator('[data-mode=gates]').click();
+    await page.locator('#welcomeStart').click();
     await expect(page.locator('#tut')).toBeVisible();
     for (let step = 1; step <= 3; step++) {
       await expect(page.locator('#tutStep')).toHaveText(`Step ${step} of 3`);
@@ -520,6 +533,7 @@ test.describe('Game screen', () => {
 test.describe('Web and store builds', () => {
   test('web: shows the Google Play promo (coming soon) and no rate button', async ({ page }) => {
     await page.goto('/');
+    await skipWelcome(page);
     await expect(page.locator('#playPromo')).toBeVisible();
     await expect(page.locator('#playPromo')).toContainText('Coming soon to Google Play');
     await page.locator('#statsBtn').click();
@@ -529,6 +543,7 @@ test.describe('Web and store builds', () => {
   test('app: no promos; Stats offers rating the app and the privacy policy', async ({ page }) => {
     await page.addInitScript(() => { window.CARREAU_PLATFORM = 'app'; });
     await page.goto('/');
+    await skipWelcome(page);
     await expect(page.locator('#playPromo')).toBeHidden();
     await page.locator('#statsBtn').click();
     await expect(page.locator('#rateBtn')).toBeVisible();

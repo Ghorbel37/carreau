@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { solve, trackErrors } = require('./helpers');
+const { solve, trackErrors, skipWelcome } = require('./helpers');
 
 test('ships its own fonts, icons and manifest', async ({ page, request }) => {
   const errors = trackErrors(page);
@@ -34,6 +34,7 @@ test.describe('inside the Capacitor app', () => {
 
   test('uses native haptics: a light tap per swipe, more on a match', async ({ page }) => {
     await page.goto('/');
+    await skipWelcome(page);
     await page.locator('[data-mode=zen]').click();
     const path = await solve(page);
     await expect.poll(async () => (await calls(page, 'Haptics')).length).toBe(path.length + 1);
@@ -49,6 +50,7 @@ test.describe('inside the Capacitor app', () => {
 
   test('the back button steps back, pauses and resumes games, then leaves the app from the menu', async ({ page }) => {
     await page.goto('/');
+    await skipWelcome(page);
     await page.locator('#statsBtn').click();
     await expect(page.locator('#stats')).toBeVisible();
     await page.evaluate(() => window.__back());
@@ -85,6 +87,7 @@ test.describe('offline', () => {
     await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
     await context.setOffline(true);
     await page.reload();
+    await skipWelcome(page);
     await expect(page.locator('.mode')).toHaveCount(5);
     await page.locator('[data-mode=zen]').click();
     await solve(page);
