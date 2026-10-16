@@ -63,7 +63,10 @@ jobs:
           grep -q CARREAU_BUILD android/app/build.gradle
           if [ -f www/version.js ]; then echo "window.CARREAU_VERSION = '$VERSION';" > www/version.js; fi
       - name: Copy the web game into the Android project
-        run: npx cap sync android
+        run: |
+          # Newer commits build the app version into dist/app first.
+          if [ -f scripts/build.js ]; then node scripts/build.js app; fi
+          npx cap sync android
       - name: Build APK
         working-directory: android
         run: ./gradlew assembleRelease --no-daemon

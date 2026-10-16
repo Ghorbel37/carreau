@@ -55,4 +55,10 @@ async function returning(page, worldId = 'square') {
   }, worldId);
 }
 
-module.exports = { returning, readState, boardState, currentTarget, pathTo, press, solve, swipe, chooseWorld, trackErrors };
+// Leave a game the way a player does: the pause button, then Menu.
+async function quitToMenu(page) {
+  await page.locator('#pause').click();
+  await page.locator('#pausedQuit').click();
+}
+
+module.exports = { returning, quitToMenu, readState, boardState, currentTarget, pathTo, press, solve, swipe, chooseWorld, trackErrors };

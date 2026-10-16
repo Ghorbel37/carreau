@@ -111,7 +111,7 @@ button:focus-visible { outline: 3px solid var(--green); outline-offset: 3px; }
 .head strong { font: 700 1.3rem/1 var(--display); }
 .link { background: none; border: 0; color: var(--ink-soft); font-size: .88rem; text-decoration: underline; cursor: pointer; padding: 4px; }
 
-.hud { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: center; }
+.hud { display: flex; flex-direction: column; gap: 10px; }
 .targets { display: flex; gap: 6px; align-items: center; }
 .stats { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .nums { display: flex; justify-content: space-between; gap: 8px; font-variant-numeric: tabular-nums; }
@@ -313,4 +313,95 @@ button:focus-visible { outline: 3px solid var(--green); outline-offset: 3px; }
 @media (prefers-reduced-motion: reduce) {
   .float, .toast.show, #flash.good, #flash.bad, #flash.gold, .guide, .edge.hint .hit { animation: none; }
   .float { opacity: 0; }
+}
+
+/* ---------- Game look ----------
+   Buttons are chunky and pressable: a thick ink edge with a hard drop shadow that
+   flattens when pressed. While a game runs, the menu bar steps aside. */
+.go, .ghost, .mode, .world, .tog, .icon-btn, .chip, .store-promo {
+  box-shadow: 0 4px 0 var(--ink);
+  transition: transform .08s, box-shadow .08s, background .2s, color .2s;
+}
+.go:active, .ghost:active, .mode:active, .world:active, .tog:active, .icon-btn:active, .chip:not(:disabled):active, a.store-promo:active {
+  transform: translateY(3px); box-shadow: 0 1px 0 var(--ink);
+}
+.go, .ghost { border-width: 2.5px; }
+.ghost { background: var(--paper); }
+.go.big, .ghost.big { width: 100%; font-size: 1.55rem; padding: 13px 18px 10px; }
+.ghost.small { font-size: 1rem; padding: 7px 14px 5px; }
+.mode { border-width: 2.5px; }
+.mode.hero { box-shadow: 0 5px 0 color-mix(in srgb, var(--ink) 55%, #000); }
+.world { border-width: 2.5px; box-shadow: 0 3px 0 var(--ink-soft); }
+.world[aria-pressed="true"] { box-shadow: 0 4px 0 var(--ink); }
+.tog[aria-pressed="false"] { box-shadow: 0 3px 0 var(--ink-soft); }
+.chip { box-shadow: 0 2px 0 var(--ink-soft); }
+.chip.has { box-shadow: 0 3px 0 var(--green); }
+.chip:disabled { box-shadow: none; }
+
+/* In-game top bar: pause button and the three numbers. */
+body.playing header { display: none; }
+body.playing .panel { padding: 10px 12px; }
+.hud-bar { display: flex; align-items: center; gap: 12px; }
+.hud-bar .nums { flex: 1; }
+.hud-bar .nums b { font-size: 1.9rem; }
+.hud-row { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: center; }
+.line-text { font-size: .8rem; color: var(--ink-soft); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.icon-btn {
+  flex: none; width: 50px; height: 50px; padding: 0; cursor: pointer;
+  display: grid; place-items: center;
+  border: 2.5px solid var(--ink); border-radius: 50%;
+  background: var(--ink); color: var(--paper);
+}
+.icon-btn svg { width: 24px; height: 24px; fill: currentColor; }
+.icon-btn:focus-visible { outline: 3px solid var(--green); outline-offset: 3px; }
+
+/* Overlays: the pause menu is opaque (no peeking at the board), results float over it. */
+.overlay {
+  position: fixed; inset: 0; z-index: 30;
+  display: grid; place-items: center;
+  padding: calc(20px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) 20px calc(20px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+  background: color-mix(in srgb, var(--paper) 72%, transparent);
+  -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+}
+.overlay.solid {
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(90deg, transparent 10px, var(--margin) 10px, var(--margin) 11.5px, transparent 11.5px),
+    repeating-linear-gradient(180deg, transparent 0 27px, var(--rule) 27px 28px);
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+}
+.card {
+  width: min(360px, 100%); box-sizing: border-box;
+  display: flex; flex-direction: column; gap: 12px; text-align: center;
+  padding: 22px 20px 20px;
+  background: var(--paper);
+  border: 3px solid var(--ink); border-radius: 14px 18px 13px 17px;
+  box-shadow: 0 7px 0 var(--ink);
+}
+.card h2 { font: 700 2.5rem/1 var(--display); margin: 0; }
+.card p { margin: 0; }
+.card .extra { text-align: left; }
+.menu { display: grid; gap: 12px; margin-top: 4px; }
+.toggles.center { justify-content: center; gap: 12px; margin-top: 6px; }
+.overlay.screen .card { animation: cardIn .3s cubic-bezier(.34,1.56,.64,1); }
+@keyframes cardIn { from { transform: translateY(16px) scale(.94); opacity: 0; } }
+
+/* Web build: a pointer to the store app. */
+.store-promo {
+  display: flex; flex-direction: column; gap: 1px; text-decoration: none; text-align: left;
+  padding: 9px 14px 8px; border: 2.5px solid var(--green); border-radius: 10px 13px 9px 12px;
+  color: var(--ink); background: var(--paper); box-shadow: 0 4px 0 var(--green); cursor: pointer;
+}
+.store-promo b { font: 700 1.1rem/1.1 var(--display); color: var(--green); }
+.store-promo span { font-size: .8rem; color: var(--ink-soft); }
+.store-promo.soon { cursor: default; border-style: dashed; box-shadow: none; }
+.card .store-promo { text-align: center; align-items: center; }
+body.platform-app .web-only { display: none !important; }
+body.platform-web .app-only { display: none !important; }
+
+@media (max-height: 700px) {
+  .store-promo span { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .overlay.screen .card { animation: none; }
 }

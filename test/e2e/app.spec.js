@@ -47,7 +47,7 @@ test.describe('inside the Capacitor app', () => {
     expect((await calls(page, 'SystemBars'))[0][2]).toEqual({ style: 'DARK' });
   });
 
-  test('the back button steps back, then leaves the app from the menu', async ({ page }) => {
+  test('the back button steps back, pauses and resumes games, then leaves the app from the menu', async ({ page }) => {
     await page.goto('/');
     await page.locator('#statsBtn').click();
     await expect(page.locator('#stats')).toBeVisible();
@@ -55,6 +55,11 @@ test.describe('inside the Capacitor app', () => {
     await expect(page.locator('#home')).toBeVisible();
     await page.locator('[data-mode=zen]').click();
     await page.evaluate(() => window.__back());
+    await expect(page.locator('#paused')).toBeVisible();
+    await page.evaluate(() => window.__back());
+    await expect(page.locator('#hud')).toBeVisible();
+    await page.locator('#pause').click();
+    await page.locator('#pausedQuit').click();
     await expect(page.locator('#home')).toBeVisible();
     expect(await calls(page, 'App')).toEqual([]);
     await page.evaluate(() => window.__back());

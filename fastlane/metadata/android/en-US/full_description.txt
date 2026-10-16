@@ -1,0 +1,31 @@
+Walls are flying at you, each with holes in a different shape. Swipe to reshape the four corners of your board and slip through before the wall hits.
+
+Carreau started as a notebook sketch: four pieces in the corners of a square, and every swipe stretches or shrinks the two pieces on that side. Simple to learn, fast to play, and hard to master once the walls speed up.
+
+HOW TO PLAY
+• Swipe along a side to resize the two corners on it.
+• Fit the shape before the wall arrives. Pieces glow green when they fit their hole.
+• Clear walls early and without a wasted swipe for more points. Keep a combo going for up to ×10.
+
+FIVE WAYS TO PLAY
+• Gates: walls fly at you faster and faster. Three lives.
+• Daily: the same walls for everyone each day. One counted run, keep your streak alive.
+• Precision: slower walls, but every wasted swipe costs a life.
+• Rush: match as many shapes as you can in 60 seconds.
+• Zen: no clock, just shapes.
+
+SPECIAL WALLS AND POWER-UPS
+• Blink walls close their holes halfway. Fit them from memory.
+• Locked walls chain one side.
+• Gold walls are faster and worth triple points.
+• Double walls send the next one right behind.
+• Collect slow motion, shields and skips along the way.
+
+THREE WORLDS TO UNLOCK
+Start on the Triangle, unlock the original square board, Carreau, then take on Ruche, the six-sided hive.
+
+ALSO
+• 14 achievements and lifetime stats
+• Music that speeds up with the walls
+• Vibration feedback, with every sound and vibration switchable
+• Plays offline, no ads, no accounts, no data collected

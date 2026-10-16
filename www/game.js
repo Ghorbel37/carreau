@@ -12,8 +12,6 @@
   // Modes that score walls (all wall modes but the tutorial).
   const scoredWalls = mode => mode === 'gates' || mode === 'daily' || mode === 'precision';
   const isWallMode = mode => WALL_MODES.includes(mode);
-  // Modes with a clock: they pause when you leave the app.
-  const timed = mode => mode === 'rush' || isWallMode(mode);
   const HINTS = {
     tri: 'swipe along a side to resize its two corners',
     square: 'swipe ⇄ top / bottom half · ⇅ left / right half',
@@ -24,6 +22,11 @@
   // Native plugins exist only inside the Capacitor app.
   const plugin = name => window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins[name];
   const isApp = !!plugin('App');
+  // Two builds from one codebase (scripts/build.js): 'web' (GitHub Pages) and 'app' (Play Store).
+  const PLATFORM = window.CARREAU_PLATFORM === 'app' ? 'app' : 'web';
+  const PLAY_URL = 'https://play.google.com/store/apps/details?id=com.ghorbel.carreau';
+  const PLAY_LIVE = !!window.CARREAU_PLAY_LIVE; // set in version.js once the store listing is public
+  document.body.classList.add('platform-' + PLATFORM);
   // Testing aids: ?kinds=blink,gold&drops=,shield forces the kind and power-up of wall 1, 2…
   const params = new URLSearchParams(location.search);
   const forced = key => (params.get(key) || '').split(',').map(s => s.trim());
@@ -87,6 +90,8 @@
     screen = name;
     SCREENS.forEach(n => { $(n).hidden = n !== name; });
     restart($(name), 'screen');
+    // While playing, the menu bar steps aside so the board has the focus.
+    document.body.classList.toggle('playing', name === 'hud' || name === 'tut' || name === 'paused');
   }
   function say(text, kind) {
     const h = $('hint');
@@ -170,7 +175,6 @@
     boardEl.classList.remove('win', 'miss');
     audio.ensure();
     setBoard(w, initial(w));
-    $('pause').hidden = !timed(mode);
     $('items').hidden = !scoredWalls(mode);
     if (mode === 'tutorial') { show('tut'); startWalls(); return; }
     show('hud');
@@ -488,22 +492,28 @@
   }
 
   // ---------- Shared play ----------
+  const MODE_NAMES = { gates: 'Gates', daily: 'Daily', precision: 'Precision', rush: 'Rush', zen: 'Zen', tutorial: 'Tutorial' };
+  // The pause menu covers the whole screen, so the board can't be studied with the clock stopped.
   function pause() {
-    if (!G || G.paused || !timed(G.mode)) return;
+    if (!G || G.paused) return;
     G.paused = true;
     G.pausedAt = performance.now();
     G.timers.forEach(t => { clearTimeout(t.id); t.ms -= G.pausedAt - t.start; });
     audio.stopMusic();
+    G.resumeTo = screen === 'tut' ? 'tut' : 'hud';
+    $('pausedInfo').textContent = `${MODE_NAMES[G.mode]} · ${world(G.world).name}`;
     show('paused');
-    say('paused');
+    $('resume').focus({ preventScroll: true });
   }
   function resume() {
     if (!G || !G.paused) return;
     G.paused = false;
     G.last = performance.now();
     G.timers.forEach(t => t.arm());
-    show(G.mode === 'tutorial' ? 'tut' : 'hud');
-    if (isWallMode(G.mode)) {
+    show(G.resumeTo || 'hud');
+    if (G.mode === 'zen') {
+      say('take your time');
+    } else if (isWallMode(G.mode)) {
       if (G.mode !== 'tutorial') { audio.startMusic(); say(G.mode === 'precision' ? 'precision · a wasted swipe costs a life' : 'fit the shape before the wall hits'); }
       requestAnimationFrame(wallTick);
     } else {
@@ -640,18 +650,27 @@
     show('result');
     $('resMain').focus({ preventScroll: true });
   }
-  function quit() {
+  function keepZenBest() {
     if (G && G.mode === 'zen') {
       const best = save.bests[G.world];
       if (G.score > best.zen) { best.zen = G.score; persist(); }
     }
+  }
+  function quit() {
+    keepZenBest();
     if (G && G.mode === 'tutorial') { settings.tutorialDone = true; saveSettings(); }
     goHome();
   }
-  // Android back button and Esc: step back one screen; on the menu, leave the app.
+  function restartGame() {
+    if (!G) return;
+    keepZenBest();
+    startGame(G.mode);
+  }
+  // Android back button and Esc: in a game, pause; on the pause menu, resume;
+  // elsewhere step back one screen; on the menu, leave the app.
   function back() {
-    if (screen === 'paused') return quit();
-    if (G) { if (timed(G.mode) && G.mode !== 'tutorial') pause(); else quit(); return; }
+    if (screen === 'paused') return resume();
+    if (G) return pause();
     if (screen !== 'home') return goHome();
     const app = plugin('App');
     if (app) app.exitApp();
@@ -744,33 +763,38 @@
   $('howTo').addEventListener('click', () => startGame('tutorial'));
   $('statsBtn').addEventListener('click', () => (screen === 'stats' ? goHome() : openStats()));
   document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', goHome));
-  $('quit').addEventListener('click', quit);
   $('tutSkip').addEventListener('click', quit);
   $('pause').addEventListener('click', pause);
   $('resume').addEventListener('click', resume);
+  $('restart').addEventListener('click', restartGame);
   $('pausedQuit').addEventListener('click', quit);
+  // Web build: point players at the store app. App build: a way to rate it.
+  ['playPromo', 'resPromo'].forEach(id => {
+    const a = $(id);
+    if (PLAY_LIVE) a.href = PLAY_URL;
+    else { a.removeAttribute('href'); a.classList.add('soon'); a.querySelector('b').textContent = 'Coming soon to Google Play'; }
+  });
+  $('rateBtn').addEventListener('click', () => { window.open(PLAY_URL, '_blank'); });
   ['slow', 'skip'].forEach(k => $('item-' + k).addEventListener('click', () => useItem(k)));
 
   // ---------- Settings ----------
+  // The same toggles sit in the menu bar and on the pause screen.
+  const TOGGLE_NAMES = { sound: 'Sound', music: 'Music', vibe: 'Vibration' };
   function syncToggles() {
-    [['soundBtn', 'sound', 'Sound'], ['musicBtn', 'music', 'Music'], ['vibeBtn', 'vibe', 'Vibration']].forEach(([id, key, name]) => {
-      $(id).setAttribute('aria-pressed', settings[key]);
-      $(id).setAttribute('aria-label', `${name} ${settings[key] ? 'on' : 'off'}`);
+    document.querySelectorAll('[data-toggle]').forEach(el => {
+      const key = el.dataset.toggle;
+      el.setAttribute('aria-pressed', settings[key]);
+      el.setAttribute('aria-label', `${TOGGLE_NAMES[key]} ${settings[key] ? 'on' : 'off'}`);
     });
   }
-  $('soundBtn').addEventListener('click', () => {
-    settings.sound = !settings.sound; saveSettings(); syncToggles();
-    if (settings.sound) audio.play('match');
-  });
-  $('musicBtn').addEventListener('click', () => {
-    settings.music = !settings.music; saveSettings(); syncToggles();
-    if (!settings.music) audio.stopMusic();
-    else if (G && isWallMode(G.mode) && G.mode !== 'tutorial' && !G.paused) audio.startMusic();
-  });
-  $('vibeBtn').addEventListener('click', () => {
-    settings.vibe = !settings.vibe; saveSettings(); syncToggles();
-    haptic('match');
-  });
+  function toggle(key) {
+    settings[key] = !settings[key]; saveSettings(); syncToggles();
+    if (key === 'sound' && settings.sound) audio.play('match');
+    if (key === 'music' && !settings.music) audio.stopMusic();
+    if (key === 'music' && settings.music && G && isWallMode(G.mode) && G.mode !== 'tutorial' && !G.paused) audio.startMusic();
+    if (key === 'vibe') haptic('match');
+  }
+  document.querySelectorAll('[data-toggle]').forEach(el => el.addEventListener('click', () => toggle(el.dataset.toggle)));
 
   // ---------- Input ----------
   boardEl.addEventListener('click', e => {

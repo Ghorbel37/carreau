@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { returning, boardState, currentTarget, pathTo, press, solve, swipe, chooseWorld, trackErrors } = require('./helpers');
+const { returning, quitToMenu, boardState, currentTarget, pathTo, press, solve, swipe, chooseWorld, trackErrors } = require('./helpers');
 
 // Square world pieces [a, b]: top-left, top-right, bottom-right, bottom-left (see core.js).
 const SKETCH = [[2, 1], [2, 2], [1, 2], [1, 1]];
@@ -104,7 +104,7 @@ test.describe('new players', () => {
     await expect(page.locator('#resTitle')).toHaveText('You’re ready.');
     await page.locator('#resMain').click();
     await expect(page.locator('#hud')).toBeVisible();
-    await page.locator('#quit').click();
+    await quitToMenu(page);
     await page.reload();
     await page.locator('[data-mode=gates]').click();
     await expect(page.locator('#hud')).toBeVisible(); // straight to the game now
@@ -178,7 +178,7 @@ test.describe('worlds', () => {
       await page.locator('[data-mode=gates]').click();
       for (let i = 0; i < 5; i++) { await solve(page); await page.clock.runFor(600); }
       await expect(page.locator('#v1')).toHaveText('×5');
-      await page.locator('#quit').click();
+      await quitToMenu(page);
       await expect(page.locator('#board .wall')).toHaveAttribute('visibility', 'hidden');
     });
   }
@@ -329,7 +329,7 @@ test.describe('Gates', () => {
     await start(page);
     await solve(page);
     await expect(page.locator('#toast')).toContainText('Through the gap');
-    await page.locator('#quit').click();
+    await quitToMenu(page);
     await page.locator('#statsBtn').click();
     await expect(page.locator('#stats')).toBeVisible();
     // This profile has every world open, so the two unlock achievements are earned too.
@@ -459,13 +459,86 @@ test.describe('Rush', () => {
     await expect(page.locator('#paused')).toBeVisible();
   });
 
-  test('Esc (Android back) pauses, then quits to the menu', async ({ page }) => {
+  test('Esc (Android back) pauses, resumes from the pause menu, and Menu quits', async ({ page }) => {
     await page.goto('/');
     await page.locator('[data-mode=rush]').click();
     await page.keyboard.press('Escape');
     await expect(page.locator('#paused')).toBeVisible();
     await page.keyboard.press('Escape');
+    await expect(page.locator('#hud')).toBeVisible();
+    await quitToMenu(page);
     await expect(page.locator('#home')).toBeVisible();
+  });
+});
+
+test.describe('Game screen', () => {
+  test.beforeEach(({ page }) => returning(page));
+
+  test('the menu bar steps aside while playing and comes back on the menu', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('header')).toBeVisible();
+    await page.locator('[data-mode=gates]').click();
+    await expect(page.locator('header')).toBeHidden();
+    await expect(page.locator('#pause')).toBeVisible();
+    await quitToMenu(page);
+    await expect(page.locator('header')).toBeVisible();
+  });
+
+  test('the pause menu hides the board completely, in every mode', async ({ page }) => {
+    for (const mode of ['gates', 'rush', 'zen']) {
+      await page.goto('/');
+      await page.locator(`[data-mode=${mode}]`).click();
+      await page.locator('#pause').click();
+      await expect(page.locator('#paused')).toBeVisible();
+      const covered = await page.evaluate(() => {
+        const r = document.getElementById('board').getBoundingClientRect();
+        const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        const bg = getComputedStyle(document.getElementById('paused')).backgroundColor;
+        return { inOverlay: !!el.closest('#paused'), opaque: !/rgba\(.*,\s*0?\.\d+\)|transparent/.test(bg) };
+      });
+      expect(covered, mode).toEqual({ inOverlay: true, opaque: true });
+    }
+  });
+
+  test('pause menu toggles and Restart', async ({ page }) => {
+    await page.clock.install();
+    await page.goto('/?kinds=&drops=');
+    await page.locator('[data-mode=gates]').click();
+    await solve(page);
+    await page.clock.runFor(600);
+    await expect(page.locator('#v1')).toHaveText('×1');
+    await page.locator('#pause').click();
+    await page.locator('#paused [data-toggle=music]').click();
+    await expect(page.locator('#musicBtn')).toHaveAttribute('aria-pressed', 'false');
+    await page.locator('#restart').click();
+    await expect(page.locator('#hud')).toBeVisible();
+    await expect(page.locator('#v0')).toHaveText('0');
+    await expect(page.locator('#line')).toHaveText(/^Wall 1 /);
+  });
+});
+
+test.describe('Web and store builds', () => {
+  test('web: shows the Google Play promo (coming soon) and no rate button', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('#playPromo')).toBeVisible();
+    await expect(page.locator('#playPromo')).toContainText('Coming soon to Google Play');
+    await page.locator('#statsBtn').click();
+    await expect(page.locator('#rateBtn')).toBeHidden();
+  });
+
+  test('app: no promos; Stats offers rating the app and the privacy policy', async ({ page }) => {
+    await page.addInitScript(() => { window.CARREAU_PLATFORM = 'app'; });
+    await page.goto('/');
+    await expect(page.locator('#playPromo')).toBeHidden();
+    await page.locator('#statsBtn').click();
+    await expect(page.locator('#rateBtn')).toBeVisible();
+    await expect(page.locator('#stats a[href="privacy.html"]')).toBeVisible();
+  });
+
+  test('the privacy policy page is there', async ({ page }) => {
+    await page.goto('/privacy.html');
+    await expect(page.locator('h1')).toHaveText('Privacy policy');
+    await expect(page.locator('body')).toContainText('collects no personal data');
   });
 });
 
@@ -482,7 +555,7 @@ test.describe('Zen', () => {
       await expect(page.locator('#v0')).toHaveText(String(i + 1));
       await page.waitForTimeout(400);
     }
-    await page.locator('#quit').click();
+    await quitToMenu(page);
     await expect(page.locator('#bestZen')).toHaveText('Best run 2');
   });
 });

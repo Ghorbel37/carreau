@@ -46,6 +46,8 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: write
+    env:
+      HAS_UPLOAD_KEY: ${{ secrets.CARREAU_UPLOAD_KEYSTORE_BASE64 != '' }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -58,10 +60,10 @@ jobs:
           java-version: 21
           cache: gradle
       - run: npm ci
-      - name: Stamp the version
-        run: echo "window.CARREAU_VERSION = '$VERSION';" > www/version.js
-      - name: Copy the web game into the Android project
-        run: npx cap sync android
+      - name: Build the app version and copy it into the Android project
+        run: |
+          node scripts/build.js app
+          npx cap sync android
       - name: Build APK
         working-directory: android
         run: ./gradlew assembleRelease --no-daemon
@@ -75,6 +77,25 @@ jobs:
           "$(dirname "$aapt")/apksigner" verify --print-certs "$apk" | grep "Carreau test build"
           cp "$apk" carreau.apk
           cp "$apk" "carreau-v$VERSION.apk"
+      # Play Store bundle, signed with your private upload key once its secrets exist (docs/PLAY_STORE.md).
+      - name: Build the Play Store bundle (AAB)
+        if: env.HAS_UPLOAD_KEY == 'true'
+        env:
+          CARREAU_UPLOAD_STORE_PASSWORD: ${{ secrets.CARREAU_UPLOAD_STORE_PASSWORD }}
+          CARREAU_UPLOAD_KEY_ALIAS: ${{ secrets.CARREAU_UPLOAD_KEY_ALIAS }}
+          CARREAU_UPLOAD_KEY_PASSWORD: ${{ secrets.CARREAU_UPLOAD_KEY_PASSWORD }}
+        run: |
+          echo "${{ secrets.CARREAU_UPLOAD_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/upload.keystore"
+          export CARREAU_UPLOAD_KEYSTORE="$RUNNER_TEMP/upload.keystore"
+          (cd android && ./gradlew bundleRelease --no-daemon)
+          cp android/app/build/outputs/bundle/release/app-release.aab "carreau-play-v$VERSION.aab"
+          rm "$RUNNER_TEMP/upload.keystore"
+      - uses: actions/upload-artifact@v7
+        if: hashFiles('carreau-play-*.aab') != ''
+        with:
+          name: carreau-play-v${{ env.VERSION }}
+          path: carreau-play-v${{ env.VERSION }}.aab
+          retention-days: 90
       - uses: actions/upload-artifact@v7
         with:
           name: carreau-v${{ env.VERSION }}
@@ -112,14 +133,37 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
-      - name: Stamp the version
-        run: |
-          echo "window.CARREAU_VERSION = '$VERSION';" > www/version.js
-          # A new offline-cache name per build, so phones pick up the new version.
-          sed -i "s/const CACHE = '[^']*'/const CACHE = 'carreau-$VERSION'/" www/sw.js
+      - name: Build the web version
+        run: node scripts/build.js web
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:
-          path: www
+          path: dist/web
       - id: deploy
         uses: actions/deploy-pages@v5
+
+  store:
+    name: Play Store listing (screenshots)
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Take the phone screenshots of the app version
+        run: |
+          node scripts/build.js app
+          ROOT=dist/app node scripts/serve.js &
+          sleep 1
+          node scripts/store-screenshots.js
+      - uses: actions/upload-artifact@v7
+        with:
+          name: play-store-listing-v${{ env.VERSION }}
+          path: fastlane/metadata/android
+          retention-days: 90

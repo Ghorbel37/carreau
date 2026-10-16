@@ -1,6 +1,8 @@
 {
   "appId": "com.ghorbel.carreau",
   "appName": "Carreau",
-  "webDir": "www",
-  "android": { "backgroundColor": "#f3f6f9" }
+  "webDir": "dist/app",
+  "android": {
+    "backgroundColor": "#f3f6f9"
+  }
 }

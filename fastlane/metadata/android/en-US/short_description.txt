@@ -1,0 +1,1 @@
+Swipe to reshape the corners and fit through the walls before they hit.

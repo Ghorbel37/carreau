@@ -8,8 +8,10 @@
     "test": "npm run test:unit && npm run test:e2e",
     "test:unit": "node --test test/unit/*.test.js",
     "test:e2e": "playwright test",
-    "android:sync": "cap sync android",
-    "android:build": "cap sync android && cd android && ./gradlew assembleRelease"
+    "android:sync": "node scripts/build.js app && cap sync android",
+    "android:build": "node scripts/build.js app && cap sync android && cd android && ./gradlew assembleRelease",
+    "build:web": "node scripts/build.js web",
+    "build:app": "node scripts/build.js app"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.2",

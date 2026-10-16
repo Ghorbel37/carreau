@@ -27,13 +27,25 @@ android {
             keyAlias "carreau"
             keyPassword "carreau-test"
         }
+        // The private upload key for the Play Store, given by CI from repository secrets
+        // (see docs/PLAY_STORE.md). Only used when CARREAU_UPLOAD_KEYSTORE is set.
+        upload {
+            def ks = System.getenv("CARREAU_UPLOAD_KEYSTORE")
+            if (ks) {
+                storeFile file(ks)
+                storePassword System.getenv("CARREAU_UPLOAD_STORE_PASSWORD")
+                keyAlias System.getenv("CARREAU_UPLOAD_KEY_ALIAS")
+                keyPassword System.getenv("CARREAU_UPLOAD_KEY_PASSWORD")
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.test
         }
         release {
-            signingConfig signingConfigs.test
+            // Play Store builds use the upload key; sideload APKs keep the test key.
+            signingConfig System.getenv("CARREAU_UPLOAD_KEYSTORE") ? signingConfigs.upload : signingConfigs.test
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

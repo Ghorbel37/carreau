@@ -24,14 +24,14 @@
   <header>
     <h1>Carr<span>eau</span></h1>
     <div class="toggles">
-      <button class="tog" id="soundBtn" aria-pressed="true" aria-label="Sound">
+      <button class="tog" id="soundBtn" data-toggle="sound" aria-pressed="true" aria-label="Sound">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor"/>
           <path class="on" d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>
           <path class="off" d="M16 9.5l5 5M21 9.5l-5 5"/>
         </svg>
       </button>
-      <button class="tog" id="musicBtn" aria-pressed="true" aria-label="Music">
+      <button class="tog" id="musicBtn" data-toggle="music" aria-pressed="true" aria-label="Music">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M9 17.5V5.5l10-2v12"/>
           <circle cx="6.5" cy="17.5" r="2.5" fill="currentColor"/>
@@ -39,7 +39,7 @@
           <path class="off" d="M3.5 3.5l17 17"/>
         </svg>
       </button>
-      <button class="tog" id="vibeBtn" aria-pressed="true" aria-label="Vibration">
+      <button class="tog" id="vibeBtn" data-toggle="vibe" aria-pressed="true" aria-label="Vibration">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="8" y="3.5" width="8" height="17" rx="1.8"/>
           <path class="on" d="M4.5 8.5v7M2 10.5v3M19.5 8.5v7M22 10.5v3"/>
@@ -70,42 +70,37 @@
         <button class="mode" data-mode="zen"><b>Zen</b><span>No clock. Just shapes.</span><em id="bestZen"></em></button>
       </div>
       <div class="line"><span class="muted" id="worldBlurb"></span><button class="link" id="howTo">How to play</button></div>
+      <a class="store-promo web-only" id="playPromo" target="_blank" rel="noopener"><b>Get Carreau on Google Play</b><span>Plays offline, with vibration and daily streaks.</span></a>
     </div>
 
     <div class="hud" id="hud" hidden>
-      <div class="targets" id="targets"></div>
-      <div class="stats">
+      <div class="hud-bar">
+        <button class="icon-btn" id="pause" aria-label="Pause">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/></svg>
+        </button>
         <div class="nums">
           <div><span class="label" id="l0"></span><b id="v0"></b></div>
           <div><span class="label" id="l1"></span><b id="v1"></b></div>
           <div><span class="label" id="l2"></span><b id="v2"></b></div>
         </div>
-        <div class="bar" id="bar"><i id="barfill"></i></div>
-        <div class="items" id="items">
-          <button class="chip" id="item-slow" aria-label="Use slow motion">Slow <b>0</b></button>
-          <button class="chip" id="item-shield" aria-label="Shields (used automatically)">Shield <b>0</b></button>
-          <button class="chip" id="item-skip" aria-label="Skip this wall">Skip <b>0</b></button>
+      </div>
+      <div class="hud-row">
+        <div class="targets" id="targets"></div>
+        <div class="stats">
+          <div class="bar" id="bar"><i id="barfill"></i></div>
+          <div class="items" id="items">
+            <button class="chip" id="item-slow" aria-label="Use slow motion">Slow <b>0</b></button>
+            <button class="chip" id="item-shield" aria-label="Shields (used automatically)">Shield <b>0</b></button>
+            <button class="chip" id="item-skip" aria-label="Skip this wall">Skip <b>0</b></button>
+          </div>
+          <span class="line-text" id="line"></span>
         </div>
-        <div class="line"><span id="line"></span><span class="links"><button class="link" id="pause">Pause</button><button class="link" id="quit">Quit</button></span></div>
       </div>
     </div>
 
     <div class="stack" id="tut" hidden>
       <p id="tutText"></p>
-      <div class="line"><span id="tutStep" class="muted"></span><button class="link" id="tutSkip">Skip tutorial</button></div>
-    </div>
-
-    <div class="stack" id="paused" hidden>
-      <p><strong>Paused.</strong> The clock is stopped.</p>
-      <div class="row"><button class="go" id="resume">Resume</button><button class="ghost" id="pausedQuit">Quit</button></div>
-    </div>
-
-    <div class="stack" id="result" hidden>
-      <p><strong id="resTitle"></strong></p>
-      <div class="stars" id="resStars" hidden></div>
-      <p id="resText"></p>
-      <ul class="extra" id="resExtra"></ul>
-      <div class="row"><button class="go" id="resMain"></button><button class="ghost" id="resAlt"></button></div>
+      <div class="line"><span id="tutStep" class="muted"></span><button class="chip" id="tutSkip">Skip tutorial</button></div>
     </div>
 
     <div class="stack" id="stats" hidden>
@@ -113,7 +108,8 @@
       <div class="stat-grid" id="statGrid"></div>
       <div class="head"><strong>Achievements</strong><span class="muted" id="achCount"></span></div>
       <ul class="ach" id="achList"></ul>
-      <p class="muted" id="version"></p>
+      <div class="row app-only"><button class="ghost small" id="rateBtn">Rate Carreau</button></div>
+      <p class="muted"><span id="version"></span> · <a href="privacy.html" target="_blank" rel="noopener">Privacy policy</a></p>
     </div>
   </section>
 
@@ -123,6 +119,39 @@
   </main>
   <p class="hint" id="hint"></p>
   <div class="toast" id="toast" role="status" hidden></div>
+
+  <!-- Pause: opaque, so the board can't be studied while the clock is stopped. -->
+  <div class="overlay solid" id="paused" role="dialog" aria-modal="true" aria-labelledby="pausedTitle" hidden>
+    <div class="card">
+      <h2 id="pausedTitle">Paused</h2>
+      <p class="muted" id="pausedInfo"></p>
+      <div class="menu">
+        <button class="go big" id="resume">Resume</button>
+        <button class="ghost big" id="restart">Restart</button>
+        <button class="ghost big" id="pausedQuit">Menu</button>
+      </div>
+      <div class="toggles center">
+        <button class="tog" data-toggle="sound" aria-label="Sound"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor"/><path class="on" d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/><path class="off" d="M16 9.5l5 5M21 9.5l-5 5"/></svg></button>
+        <button class="tog" data-toggle="music" aria-label="Music"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 17.5V5.5l10-2v12"/><circle cx="6.5" cy="17.5" r="2.5" fill="currentColor"/><circle cx="16.5" cy="15.5" r="2.5" fill="currentColor"/><path class="off" d="M3.5 3.5l17 17"/></svg></button>
+        <button class="tog" data-toggle="vibe" aria-label="Vibration"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="3.5" width="8" height="17" rx="1.8"/><path class="on" d="M4.5 8.5v7M2 10.5v3M19.5 8.5v7M22 10.5v3"/><path class="off" d="M3.5 3.5l17 17"/></svg></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Results: a card over the finished board. -->
+  <div class="overlay" id="result" role="dialog" aria-modal="true" aria-labelledby="resTitle" hidden>
+    <div class="card">
+      <h2 id="resTitle"></h2>
+      <div class="stars" id="resStars" hidden></div>
+      <p id="resText"></p>
+      <ul class="extra" id="resExtra"></ul>
+      <div class="menu">
+        <button class="go big" id="resMain"></button>
+        <button class="ghost big" id="resAlt"></button>
+      </div>
+      <a class="store-promo web-only" id="resPromo" target="_blank" rel="noopener"><b>Like it? Get the app</b><span>Carreau on Google Play</span></a>
+    </div>
+  </div>
 </div>
 
 <script src="version.js"></script>

@@ -3,7 +3,8 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const root = path.join(__dirname, '..', 'www');
+// ROOT=dist/app serves a build instead of the source.
+const root = path.resolve(process.env.ROOT || path.join(__dirname, '..', 'www'));
 const port = Number(process.env.PORT) || 4173;
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.svg': 'image/svg+xml', '.png': 'image/png' };
 
