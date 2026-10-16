@@ -14,7 +14,8 @@ Everything in the repo is ready; the steps below are the ones only the account o
 | Listing text | `fastlane/metadata/android/en-US/` (title, short and full description, changelog) |
 | Icon 512×512, feature graphic 1024×500 | `fastlane/metadata/android/en-US/images/` |
 | Phone screenshots 1080×1920 | CI job **Play Store listing** → artifact `play-store-listing-v1.1.N` |
-| Privacy policy | `https://ghorbel37.github.io/carreau/privacy.html` (published with the web version) |
+| Privacy policy | `https://ghorbel37.github.io/carreau/privacy.html` (published with the web version; covers AdMob) |
+| Ads | Google AdMob via `@capacitor-community/admob`, app build only (`www/ads.js`), with Google's **test IDs** until you add yours |
 
 ## Web and store versions
 
@@ -23,6 +24,7 @@ One codebase, two builds:
 | | Web (GitHub Pages) | Store app |
 | --- | --- | --- |
 | Build | `node scripts/build.js web` | `node scripts/build.js app` |
+| Ads | None (`ads.js` is left out of the build) | AdMob: banner on menu screens, a full-screen ad at most every 2nd game over (90 s apart), optional rewarded ads (continue a Gates/Precision run once, +15 s in Rush once) |
 | Google Play promo | On the menu and results ("Coming soon" until `PLAY_LIVE=1`) | Hidden |
 | Rate the app | Hidden | Button on the Stats screen |
 | Offline | Service worker + web manifest | Files ship inside the app |
@@ -56,17 +58,32 @@ Once the listing is public, set `PLAY_LIVE: '1'` in the `env` of the **pages** j
 
    The next push to `main` produces `carreau-play-v1.1.N.aab` as a run artifact.
 
+## AdMob (ads in the app)
+
+Until this step the app shows Google's **test ads**, which pay nothing.
+
+1. Sign up at <https://admob.google.com> with the same Google account.
+2. **Apps › Add app › Android**, "listed on a supported app store?" **No** (for now). Name: Carreau. You get an **App ID** like `ca-app-pub-1234567890123456~1234567890`.
+3. **Ad units › Add ad unit**, three times: **Banner** (menus), **Interstitial** (after some game overs), **Rewarded** (continue a run / +15 s). Each has an ID like `ca-app-pub-1234567890123456/1234567890`.
+4. **Privacy & messaging › GDPR**: create and publish the European consent message. The app already shows it where required and has a *Privacy choices* button on the Stats screen.
+5. Put your IDs in the game:
+   - `android/app/src/main/res/values/strings.xml`: `<string name="admob_app_id">ca-app-pub-YOUR_APP_ID</string>`
+   - `www/ads.js`: `TESTING: false` and your `banner`, `interstitial` and `rewarded` unit IDs.
+6. After the app is live on Play, link it in AdMob (App settings › App store details) and publish the `app-ads.txt` line AdMob gives you (it must be at the root of a website you list as the developer site).
+
+**Never tap your own live ads**; AdMob can ban the account. Add your phone as a test device in AdMob (Settings › Test devices) before installing a build with real IDs.
+
 ## Creating the app in Play Console
 
 1. **Create app**: name *Carreau*, default language English (US), *Game*, *Free*.
 2. **Store listing**: copy the texts from `fastlane/metadata/android/en-US/`, upload `icon.png`, `featureGraphic.png` and the screenshots from the `play-store-listing` artifact. Category: *Puzzle*. Contact email: yours.
 3. **App content** answers:
    - Privacy policy: `https://ghorbel37.github.io/carreau/privacy.html`
-   - Ads: **No ads**
+   - Ads: **Yes, my app contains ads**
    - App access: **All functionality available without special access**
    - Content rating questionnaire: a puzzle game with no violence, no user content, no purchases → rated for everyone
-   - Target audience: 13+ is simplest (choosing under-13 adds Families policy requirements)
-   - Data safety: **No data collected, no data shared** (progress is stored only on the device)
+   - Target audience: **13 and over** (choosing under-13 brings in the Families policy, with stricter ad rules)
+   - Data safety: the game stores progress only on the device; the data comes from the AdMob SDK. Follow Google's answers at <https://developers.google.com/admob/android/privacy/play-data-disclosure>. In short: **collected and shared**: Location › Approximate location; Device or other IDs; App activity › App interactions; App info and performance › Crash logs, Diagnostics. Purposes: Advertising or marketing, Analytics, Fraud prevention and security. **Encrypted in transit**: yes. **Deletion**: no account; uninstalling deletes progress.
    - Government app / financial features / health: **No**
 4. **Testing → Closed testing**: create a track, add your testers' emails, upload the `.aab`, roll out. Keep 12+ testers opted in for 14 days.
 5. **Production**: apply for production access when the closed test requirement is met, then promote the release.

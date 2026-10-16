@@ -1,6 +1,6 @@
 // Builds one of the two versions of the game from www/ into dist/<target>/.
-//   node scripts/build.js web   → dist/web  (GitHub Pages: store promos, offline cache)
-//   node scripts/build.js app   → dist/app  (Play Store via Capacitor: no promos, no service worker)
+//   node scripts/build.js web   → dist/web  (GitHub Pages: no ads, store promos, offline cache)
+//   node scripts/build.js app   → dist/app  (Play Store via Capacitor: AdMob ads, no promos, no service worker)
 // VERSION (e.g. 1.1.12) and PLAY_LIVE=1 come from the environment.
 const fs = require('fs');
 const path = require('path');
@@ -24,9 +24,15 @@ fs.writeFileSync(path.join(out, 'version.js'),
   `window.CARREAU_PLAY_LIVE = ${playLive};\n`);
 
 if (target === 'web') {
+  // No ads on the web: drop the AdMob module and its script tag.
+  fs.rmSync(path.join(out, 'ads.js'), { force: true });
+  const index = path.join(out, 'index.html');
+  fs.writeFileSync(index, fs.readFileSync(index, 'utf8').replace(/\s*<script src="ads.js"><\/script>/, ''));
   // A new offline-cache name per build, so browsers pick up the new version.
   const sw = path.join(out, 'sw.js');
-  fs.writeFileSync(sw, fs.readFileSync(sw, 'utf8').replace(/const CACHE = '[^']*'/, `const CACHE = 'carreau-${version}'`));
+  fs.writeFileSync(sw, fs.readFileSync(sw, 'utf8')
+    .replace(/const CACHE = '[^']*'/, `const CACHE = 'carreau-${version}'`)
+    .replace(" 'ads.js',", ''));
 } else {
   // The app ships its files; no service worker or web manifest needed.
   ['sw.js', 'manifest.webmanifest'].forEach(f => fs.rmSync(path.join(out, f), { force: true }));

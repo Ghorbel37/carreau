@@ -28,4 +28,4 @@ ALSO
 • 14 achievements and lifetime stats
 • Music that speeds up with the walls
 • Vibration feedback, with every sound and vibration switchable
-• Plays offline, no ads, no accounts, no data collected
+• Plays offline, no account needed

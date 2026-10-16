@@ -43,7 +43,8 @@ body {
   margin: 0 auto;
   padding-inline: 20px 16px;
   /* In the app, Capacitor passes the status and navigation bar sizes as --safe-area-inset-*. */
-  padding-block: calc(10px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) calc(12px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+  /* --banner-h: room for the app's banner ad on menu screens (set by ads.js). */
+  padding-block: calc(10px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) calc(12px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)) + var(--banner-h, 0px));
   display: flex; flex-direction: column; gap: 10px;
 }
 header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }

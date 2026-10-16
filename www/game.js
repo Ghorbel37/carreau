@@ -28,6 +28,9 @@
   const PLAY_URL = 'https://play.google.com/store/apps/details?id=com.ghorbel.carreau';
   const PLAY_LIVE = !!window.CARREAU_PLAY_LIVE; // set in version.js once the store listing is public
   document.body.classList.add('platform-' + PLATFORM);
+  // Ads (AdMob) exist only in the app build; on the web every ad call is skipped.
+  const Ads = window.CarreauAds;
+  const ADS = PLATFORM === 'app' && !!Ads;
   // Testing aids: ?kinds=blink,gold&drops=,shield forces the kind and power-up of wall 1, 2…
   const params = new URLSearchParams(location.search);
   const forced = key => (params.get(key) || '').split(',').map(s => s.trim());
@@ -92,7 +95,10 @@
     SCREENS.forEach(n => { $(n).hidden = n !== name; });
     restart($(name), 'screen');
     // While playing, the menu bar steps aside so the board has the focus.
-    document.body.classList.toggle('playing', name === 'hud' || name === 'tut' || name === 'paused');
+    const playing = name === 'hud' || name === 'tut' || name === 'paused';
+    document.body.classList.toggle('playing', playing);
+    // The banner ad shows on menu screens only, never during play.
+    if (ADS) { if (playing) Ads.hideBanner(); else Ads.showBanner(); }
   }
   function say(text, kind) {
     const h = $('hint');
@@ -322,7 +328,7 @@
       restart(boardEl, 'shake');
       audio.play('crash');
       haptic('fail');
-      if (G.lives <= 0) { G.locked = true; G.phase = 'crash'; later(finish, 900); }
+      if (G.lives <= 0) { G.locked = true; G.phase = 'crash'; later(() => offerContinue(true), 900); }
       return;
     }
     // Gates and Daily: the wall will score less; say so unless the holes are hidden (blink).
@@ -410,7 +416,7 @@
     setTimeout(() => boardEl.classList.remove('miss'), 700);
     audio.play('crash');
     haptic('fail');
-    later(() => { if (G.lives <= 0) return finish(); afterWall(); }, 900);
+    later(() => { if (G.lives <= 0) return offerContinue(false); afterWall(); }, 900);
   }
   function useItem(name) {
     if (!G || !isWallMode(G.mode) || G.paused || G.phase !== 'approach' || !G.items[name]) return;
@@ -484,7 +490,7 @@
     const sec = Math.ceil(G.time);
     if (sec <= 5 && sec < G.lastSec && sec > 0) audio.play('tick');
     G.lastSec = sec;
-    if (G.time <= 0) { G.time = 0; updateHud(); return finish(); }
+    if (G.time <= 0) { G.time = 0; updateHud(); return offerMoreTime(); }
     updateHud();
     requestAnimationFrame(rushTick);
   }
@@ -511,7 +517,7 @@
   const MODE_NAMES = { gates: 'Gates', daily: 'Daily', precision: 'Precision', rush: 'Rush', zen: 'Zen', tutorial: 'Tutorial' };
   // The pause menu covers the whole screen, so the board can't be studied with the clock stopped.
   function pause() {
-    if (!G || G.paused) return;
+    if (!G || G.paused || G.offering) return;
     G.paused = true;
     G.pausedAt = performance.now();
     G.timers.forEach(t => { clearTimeout(t.id); t.ms -= G.pausedAt - t.start; });
@@ -608,10 +614,56 @@
     if (opened.length) audio.play('unlock');
     return opened;
   }
+  // ---------- Rewarded ads (app only): one second chance per run ----------
+  // Gates and Precision: continue with one life. Daily stays one fair run for everyone.
+  function offerContinue(sameWall) {
+    const g = G;
+    if (!ADS || !Ads.available() || g.revived || !(g.mode === 'gates' || g.mode === 'precision')) return finish();
+    g.revived = true;
+    offer('Out of lives', `${fmt(g.score)} points so far. Watch a short ad to keep going with one life?`, '\u25B6 Continue', () => {
+      if (G !== g) return;
+      G.lives = 1; bump(2);
+      show('hud');
+      say('one more life · go!', 'good');
+      // The walls' animation loop keeps running through the offer; just carry on.
+      if (sameWall) { G.phase = 'approach'; G.locked = false; } else afterWall();
+    });
+  }
+  // Rush: 15 more seconds.
+  function offerMoreTime() {
+    const g = G;
+    if (!ADS || !Ads.available() || g.extended) return finish();
+    g.extended = true;
+    offer('Time\u2019s up', `${g.score} shapes so far. Watch a short ad for 15 more seconds?`, '\u25B6 +15 s', () => {
+      if (G !== g) return;
+      G.time = 15; G.lastSec = 15;
+      show('hud');
+      say('+15 s · go!', 'good');
+      G.last = performance.now();
+      requestAnimationFrame(rushTick);
+    });
+  }
+  function offer(title, text, label, onReward) {
+    const g = G;
+    g.offering = true;
+    $('resStars').hidden = true;
+    $('resTitle').textContent = title;
+    $('resText').textContent = text;
+    $('resExtra').innerHTML = '';
+    setResultButtons([label, () => Ads.rewarded().then(ok => {
+      if (G !== g) return;
+      g.offering = false;
+      if (ok) onReward(); else { toast('No ad', 'Nothing to watch right now'); finish(); }
+    })], ['No thanks', () => { if (G === g) { g.offering = false; finish(); } }]);
+    show('result');
+  }
+
   function setResultButtons(main, alt) {
     $('resMain').textContent = main[0]; $('resMain').onclick = main[1];
     $('resAlt').textContent = alt[0]; $('resAlt').onclick = alt[1];
   }
+  // Leaving a game-over screen may show a full-screen ad first (app only, now and then).
+  const afterLossAd = action => () => (ADS ? Ads.afterLoss() : Promise.resolve()).then(action);
   function finish() {
     const g = G;
     const st = save.stats;
@@ -646,14 +698,14 @@
       }
       checkUnlocks().forEach(w => extra.push(`${world(w).name} unlocked`));
       checkAchievements();
-      setResultButtons(['Play again', () => startGame(g.mode)], ['Menu', goHome]);
+      setResultButtons(['Play again', afterLossAd(() => startGame(g.mode))], ['Menu', afterLossAd(goHome)]);
     } else {
       const best = save.bests[g.world];
       const isBest = g.score > best.rush;
       if (isBest) best.rush = g.score;
       title = isBest ? 'New best!' : "Time's up.";
       text = `${g.score} shapes matched, ${g.perfect} of them in the fewest moves. Best: ${best.rush}.`;
-      setResultButtons(['Play again', () => startGame('rush')], ['Menu', goHome]);
+      setResultButtons(['Play again', afterLossAd(() => startGame('rush'))], ['Menu', afterLossAd(goHome)]);
     }
     (g.newAch || []).forEach(a => extra.push(`Achievement: ${a}`));
     persist();
@@ -686,6 +738,7 @@
   // elsewhere step back one screen; on the menu, leave the app.
   function back() {
     if (screen === 'paused') return resume();
+    if (G && G.offering) return $('resAlt').click(); // back on a "watch an ad?" offer = no thanks
     if (G) return pause();
     if (screen !== 'home') return goHome();
     const app = plugin('App');
@@ -734,6 +787,7 @@
   }
   function openStats() {
     stopGame();
+    $('adPrivacy').hidden = !(ADS && Ads.privacyOptionsRequired());
     const st = save.stats;
     const rows = [
       ['Runs', fmt(st.runs)], ['Walls cleared', fmt(st.walls)], ['Clean clears', fmt(st.clean)],
@@ -794,6 +848,7 @@
     else { a.removeAttribute('href'); a.classList.add('soon'); a.querySelector('b').textContent = 'Coming soon to Google Play'; }
   });
   $('rateBtn').addEventListener('click', () => { window.open(PLAY_URL, '_blank'); });
+  $('adPrivacy').addEventListener('click', () => Ads.showPrivacyOptions());
   ['slow', 'skip'].forEach(k => $('item-' + k).addEventListener('click', () => useItem(k)));
 
   // ---------- Settings ----------
@@ -876,6 +931,8 @@
   // slides in when it ends. Players with progress from earlier versions count as returning.
   const hasProgress = save.stats.runs > 0 || save.stats.walls > 0 || WORLD_ORDER.some(w => Object.values(save.bests[w]).some(v => v > 0));
   if (!settings.tutorialDone && !hasProgress) startGame('tutorial');
+  // AdMob: consent form where required, then the banner if a menu is showing.
+  if (ADS) Ads.init().then(() => { if (!document.body.classList.contains('playing') && screen !== 'result') Ads.showBanner(); });
 
   // Offline support on the web (the app already ships its files).
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !isApp) {

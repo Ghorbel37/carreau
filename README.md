@@ -58,7 +58,7 @@ Testing aid: `?kinds=gold,locked&drops=,shield` forces the kind and power-up of 
 
 ## Web and store versions
 
-`node scripts/build.js web` builds the GitHub Pages version (Google Play promos, offline cache) into `dist/web`; `node scripts/build.js app` builds the store version (no promos, a Rate button, no service worker) into `dist/app`, which Capacitor packages. Details in [docs/PLAY_STORE.md](docs/PLAY_STORE.md).
+`node scripts/build.js web` builds the GitHub Pages version (no ads, Google Play promos, offline cache) into `dist/web`; `node scripts/build.js app` builds the store version (Google AdMob ads, no promos, a Rate button, no service worker) into `dist/app`, which Capacitor packages. Details in [docs/PLAY_STORE.md](docs/PLAY_STORE.md).
 
 ## Project layout
 

@@ -4,4 +4,7 @@
     <string name="title_activity_main">Carreau</string>
     <string name="package_name">com.ghorbel.carreau</string>
     <string name="custom_url_scheme">com.ghorbel.carreau</string>
+    <!-- AdMob App ID. This is Google's TEST app ID; replace it with yours before publishing
+         (see docs/PLAY_STORE.md). -->
+    <string name="admob_app_id">ca-app-pub-3940256099942544~3347511713</string>
 </resources>
