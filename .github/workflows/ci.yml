@@ -75,7 +75,6 @@ jobs:
           "$aapt" dump badging "$apk" | grep -E "package:|application-label:|sdkVersion"
           "$aapt" dump badging "$apk" | grep -q "versionName='$VERSION'" || { echo "APK version is not $VERSION"; exit 1; }
           "$(dirname "$aapt")/apksigner" verify --print-certs "$apk" | grep "Carreau test build"
-          cp "$apk" carreau.apk
           cp "$apk" "carreau-v$VERSION.apk"
       # Play Store bundle, signed with your private upload key once its secrets exist (docs/PLAY_STORE.md).
       - name: Build the Play Store bundle (AAB)
@@ -112,10 +111,7 @@ jobs:
           name: Carreau v${{ env.VERSION }}
           target_commitish: ${{ github.sha }}
           make_latest: true
-          # A versioned copy, plus carreau.apk so the "latest" download link never changes.
-          files: |
-            carreau-v${{ env.VERSION }}.apk
-            carreau.apk
+          files: carreau-v${{ env.VERSION }}.apk
           body_path: release-notes.md
 
   pages:

@@ -6,7 +6,7 @@ A 2D mobile puzzle game based on a notebook sketch: pieces sit in the corners of
 
 **Google Play:** the store version is prepared; see [docs/PLAY_STORE.md](docs/PLAY_STORE.md) for the publishing checklist.
 
-**Try it on Android:** open <https://github.com/Ghorbel37/carreau/releases/latest/download/carreau.apk> on your phone, then open the downloaded file and allow installs from that source when asked. New builds install over the old one and keep your progress.
+**Try it on Android:** open <https://github.com/Ghorbel37/carreau/releases/latest> on your phone, download `carreau-v1.1.N.apk`, then open the downloaded file and allow installs from that source when asked. New builds install over the old one and keep your progress.
 
 ## Rules
 
@@ -92,4 +92,4 @@ Builds are signed with `android/app/carreau-test.keystore`, a test key that is p
 
 ## CI
 
-`.github/workflows/ci.yml` runs the unit tests and the browser tests, then, on `main`, publishes the web version to GitHub Pages and builds the APK, checks its package name, version and signature, and publishes it as a GitHub release tagged `v1.1.<run number>` with `carreau-v1.1.<run number>.apk` and `carreau.apk` (the stable link above always points at the latest).
+`.github/workflows/ci.yml` runs the unit tests and the browser tests, then, on `main`, publishes the web version to GitHub Pages and builds the APK, checks its package name, version and signature, and publishes it as a GitHub release tagged `v1.1.<run number>` with `carreau-v1.1.<run number>.apk` (the link above always opens the latest).
