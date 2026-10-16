@@ -22,6 +22,7 @@
   // Native plugins exist only inside the Capacitor app.
   const plugin = name => window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins[name];
   const isApp = !!plugin('App');
+  const reduceMotion = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
   // Two builds from one codebase (scripts/build.js): 'web' (GitHub Pages) and 'app' (Play Store).
   const PLATFORM = window.CARREAU_PLATFORM === 'app' ? 'app' : 'web';
   const PLAY_URL = 'https://play.google.com/store/apps/details?id=com.ghorbel.carreau';
@@ -84,7 +85,7 @@
   const boardEl = $('board'), stageEl = $('stage');
   const mainView = new BoardView(boardEl, { arrows: true, animate: true });
   function restart(el, cls) { el.classList.remove(cls); void el.getBoundingClientRect(); el.classList.add(cls); }
-  const SCREENS = ['home', 'hud', 'tut', 'paused', 'result', 'stats', 'welcome'];
+  const SCREENS = ['home', 'hud', 'tut', 'paused', 'result', 'stats'];
   let screen = 'home';
   function show(name) {
     screen = name;
@@ -189,7 +190,7 @@
   // ---------- Gates (also Daily and the tutorial) ----------
   // The tutorial: three slow walls that wait for you, with the side to swipe shown.
   const TUTORIAL = [
-    { k: 1, text: 'A wall is coming. Its holes show the shape your corners must take. Swipe along the glowing side.' },
+    { k: 1, text: 'Welcome to Carreau! This is your board. A wall is coming, and its holes show the shape your corners must take. Swipe along the glowing side to stretch or shrink the two corners on it.' },
     { k: 1, text: 'Pieces outlined in green already fit their hole. Swipe the glowing side to fit the rest.' },
     { k: 2, text: 'This wall needs two swipes. Real walls don’t wait, and a crash costs one of your 3 lives.' },
   ];
@@ -434,14 +435,29 @@
   }
   function finishTutorial() {
     settings.tutorialDone = true; saveSettings();
+    revealMenu('you\u2019re ready · tap Gates to play');
+  }
+  // End of the tutorial: the centred board slides into its place on the menu,
+  // then the menu fades in piece by piece and Gates pulses.
+  function revealMenu(message) {
+    const before = boardEl.getBoundingClientRect();
     stopGame();
-    $('resStars').hidden = true;
-    $('resTitle').textContent = 'You’re ready.';
-    $('resText').textContent = 'Clear walls early for more points, keep a combo going, and watch for special walls: blink, locked, gold and double. Power-ups ride on some walls.';
-    $('resExtra').innerHTML = '';
-    setResultButtons(['Play Gates', () => startGame('gates')], ['Menu', goHome]);
-    show('result');
-    say(HINTS[settings.world]);
+    setBoard(settings.world, initial(settings.world));
+    goHome();
+    const after = boardEl.getBoundingClientRect();
+    const home = $('home'), hero = document.querySelector('.mode.hero');
+    if (!reduceMotion && after.width && boardEl.animate) {
+      const dx = before.left + before.width / 2 - (after.left + after.width / 2);
+      const dy = before.top + before.height / 2 - (after.top + after.height / 2);
+      boardEl.animate([{ transform: `translate(${dx}px, ${dy}px) scale(${before.width / after.width})` }, { transform: 'none' }],
+        { duration: 700, easing: 'cubic-bezier(.22, 1, .36, 1)' });
+    }
+    restart(home, 'reveal');
+    restart(document.body, 'revealing');
+    restart(hero, 'pulse');
+    setTimeout(() => { home.classList.remove('reveal'); document.body.classList.remove('revealing'); }, 1800);
+    setTimeout(() => hero.classList.remove('pulse'), 3600);
+    say(message, 'good');
   }
 
   // ---------- Rush and Zen ----------
@@ -670,7 +686,6 @@
   // elsewhere step back one screen; on the menu, leave the app.
   function back() {
     if (screen === 'paused') return resume();
-    if (screen === 'welcome') return $('welcomeSkip').click();
     if (G) return pause();
     if (screen !== 'home') return goHome();
     const app = plugin('App');
@@ -762,11 +777,12 @@
     else startGame(m);
   }));
   $('howTo').addEventListener('click', () => startGame('tutorial'));
-  $('welcomeStart').addEventListener('click', () => { audio.ensure(); startGame('tutorial'); });
-  $('welcomeSkip').addEventListener('click', () => { settings.tutorialDone = true; saveSettings(); goHome(); });
   $('statsBtn').addEventListener('click', () => (screen === 'stats' ? goHome() : openStats()));
   document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', goHome));
-  $('tutSkip').addEventListener('click', quit);
+  $('tutSkip').addEventListener('click', () => {
+    settings.tutorialDone = true; saveSettings();
+    revealMenu(HINTS[settings.world]);
+  });
   $('pause').addEventListener('click', pause);
   $('resume').addEventListener('click', resume);
   $('restart').addEventListener('click', restartGame);
@@ -856,13 +872,10 @@
   syncToggles();
   mainView.setWorld(settings.world, state);
   goHome();
-  // First launch: a welcome card that offers the guided tutorial straight away.
-  // Players with progress from earlier versions count as returning.
+  // First launch: the tutorial starts right away on the centred board; the menu
+  // slides in when it ends. Players with progress from earlier versions count as returning.
   const hasProgress = save.stats.runs > 0 || save.stats.walls > 0 || WORLD_ORDER.some(w => Object.values(save.bests[w]).some(v => v > 0));
-  if (!settings.tutorialDone && !hasProgress) {
-    show('welcome');
-    say('');
-  }
+  if (!settings.tutorialDone && !hasProgress) startGame('tutorial');
 
   // Offline support on the web (the app already ships its files).
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !isApp) {

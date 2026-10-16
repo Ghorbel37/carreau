@@ -76,16 +76,21 @@ test.describe('home and controls', () => {
 });
 
 test.describe('new players', () => {
-  test('see a welcome card first; Skip goes to the menu and it does not come back', async ({ page }) => {
+  test('start in the tutorial on the centred board; Skip slides the menu in and it does not come back', async ({ page }) => {
     await page.goto('/');
-    await expect(page.locator('#welcome')).toBeVisible();
+    await expect(page.locator('#tut')).toBeVisible();
+    await expect(page.locator('#tutText')).toContainText('Welcome to Carreau!');
+    await expect(page.locator('header')).toBeHidden();
     await expect(page.locator('#home')).toBeHidden();
-    await skipWelcome(page);
+    await page.locator('#tutSkip').click();
+    await expect(page.locator('#home')).toBeVisible();
+    await expect(page.locator('#home')).toHaveClass(/reveal/);
+    await expect(page.locator('header')).toBeVisible();
     await page.reload();
-    await expect(page.locator('#welcome')).toBeHidden();
+    await expect(page.locator('#tut')).toBeHidden();
     await expect(page.locator('#home')).toBeVisible();
     await page.locator('[data-mode=gates]').click();
-    await expect(page.locator('#hud')).toBeVisible(); // skipping also skips the tutorial
+    await expect(page.locator('#hud')).toBeVisible(); // skipping also counts as done
   });
 
   test('start on Triangle with the other worlds locked', async ({ page }) => {
@@ -100,10 +105,9 @@ test.describe('new players', () => {
     await expect(page.locator('#board')).toHaveAttribute('data-world', 'tri');
   });
 
-  test('get the guided tutorial from the welcome card', async ({ page }) => {
+  test('play the guided tutorial first; the menu slides in when it ends', async ({ page }) => {
     await page.clock.install();
     await page.goto('/');
-    await page.locator('#welcomeStart').click();
     await expect(page.locator('#tut')).toBeVisible();
     for (let step = 1; step <= 3; step++) {
       await expect(page.locator('#tutStep')).toHaveText(`Step ${step} of 3`);
@@ -114,11 +118,11 @@ test.describe('new players', () => {
       await press(page, path);
       await page.clock.runFor(500);
     }
-    await expect(page.locator('#resTitle')).toHaveText('You’re ready.');
-    await page.locator('#resMain').click();
-    await expect(page.locator('#hud')).toBeVisible();
-    await quitToMenu(page);
+    await expect(page.locator('#home')).toBeVisible();
+    await expect(page.locator('.mode.hero')).toHaveClass(/pulse/);
+    await expect(page.locator('#hint')).toHaveText(/tap Gates to play/);
     await page.reload();
+    await expect(page.locator('#home')).toBeVisible();
     await page.locator('[data-mode=gates]').click();
     await expect(page.locator('#hud')).toBeVisible(); // straight to the game now
   });

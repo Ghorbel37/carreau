@@ -406,10 +406,21 @@ body.platform-web .app-only { display: none !important; }
   .overlay.screen .card { animation: none; }
 }
 
-/* Welcome card */
-.welcome-board { width: 120px; height: 120px; margin: 0 auto; overflow: visible; }
-.welcome-board .w-outline { fill: none; stroke: var(--ink); stroke-width: .14; }
-.welcome-board .w-piece { fill: url(#hatch); stroke: var(--ink); stroke-width: .1; }
-.welcome-board .w-swipe { fill: none; stroke: var(--green); stroke-width: .16; stroke-linecap: round; stroke-linejoin: round; animation: wswipe 1.6s ease-in-out infinite; }
-@keyframes wswipe { 0%, 100% { transform: translateX(-.4px); opacity: .4; } 50% { transform: translateX(.4px); opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .welcome-board .w-swipe { animation: none; } }
+/* End of the tutorial: the menu arrives piece by piece. */
+#home.reveal > *, #home.reveal .modes > * { animation: revealUp .5s cubic-bezier(.34,1.56,.64,1) both; }
+#home.reveal > :nth-child(1) { animation-delay: .35s; }
+#home.reveal .modes > :nth-child(1) { animation-delay: .5s; }
+#home.reveal .modes > :nth-child(2) { animation-delay: .6s; }
+#home.reveal .modes > :nth-child(3) { animation-delay: .7s; }
+#home.reveal .modes > :nth-child(4) { animation-delay: .8s; }
+#home.reveal .modes > :nth-child(5) { animation-delay: .9s; }
+#home.reveal > :nth-child(3), #home.reveal > :nth-child(4) { animation-delay: 1s; }
+#home.reveal > .modes { animation: none; }
+body.revealing header { animation: revealDown .45s cubic-bezier(.34,1.56,.64,1) .2s both; }
+@keyframes revealUp { from { opacity: 0; transform: translateY(18px) scale(.96); } }
+@keyframes revealDown { from { opacity: 0; transform: translateY(-14px); } }
+.mode.hero.pulse { animation: heroPulse 1.1s ease-in-out 1.1s 2; }
+@keyframes heroPulse { 50% { transform: scale(1.035); box-shadow: 0 5px 0 color-mix(in srgb, var(--ink) 55%, #000), 0 0 0 6px color-mix(in srgb, var(--green) 35%, transparent); } }
+@media (prefers-reduced-motion: reduce) {
+  #home.reveal > *, #home.reveal .modes > *, body.revealing header, .mode.hero.pulse { animation: none; }
+}

@@ -61,9 +61,9 @@ async function quitToMenu(page) {
   await page.locator('#pausedQuit').click();
 }
 
-// A brand-new player sees the welcome card first; skip it.
+// A brand-new player starts in the tutorial; skip it.
 async function skipWelcome(page) {
-  await page.locator('#welcomeSkip').click();
+  await page.locator('#tutSkip').click();
   await page.locator('#home').waitFor();
 }
 
