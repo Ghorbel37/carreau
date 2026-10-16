@@ -66,7 +66,11 @@ test.describe('home and controls', () => {
     const path = await solve(page);
     await expect.poll(() => page.evaluate(() => window.__buzz.length)).toBe(path.length + 1);
     expect(await page.evaluate(() => window.__buzz.filter(p => p === 6).length)).toBe(path.length);
-    await page.locator('#vibeBtn').click();
+    // Switch vibration off from the pause menu (the menu bar is hidden while playing).
+    await page.locator('#pause').click();
+    await page.locator('#paused [data-toggle=vibe]').click();
+    await expect(page.locator('#vibeBtn')).toHaveAttribute('aria-pressed', 'false');
+    await page.locator('#resume').click();
     const after = await page.evaluate(() => window.__buzz.length);
     await page.waitForTimeout(400);
     await solve(page);
@@ -415,6 +419,7 @@ test.describe('Daily', () => {
     // Another player on the same day sees the same first wall.
     const other = await browser.newContext();
     const p2 = await other.newPage();
+    await returning(p2);
     await p2.clock.install({ time: day });
     await p2.goto(page.url());
     await p2.locator('[data-mode=daily]').click();

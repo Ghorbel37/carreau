@@ -428,3 +428,7 @@ body.revealing header { animation: revealDown .45s cubic-bezier(.34,1.56,.64,1) 
 
 .row.app-only { justify-content: center; flex-wrap: wrap; gap: 8px; }
 .ghost.small:disabled { opacity: .6; box-shadow: none; cursor: default; }
+
+/* Toasts never block taps; during play they sit low, clear of the pause button and power-ups. */
+.toast { pointer-events: none; }
+body.playing .toast { top: auto; bottom: calc(56px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); }
