@@ -21,6 +21,7 @@
   };
 
   let backend = null;
+  let removed = false; // "Remove ads": no banners or full-screen ads (rewarded ads stay optional)
   let ready = false;
   let bannerShown = false;
   let losses = 0;
@@ -42,7 +43,7 @@
     document.documentElement.style.setProperty('--banner-h', `${Math.round(px)}px`);
   }
   async function preloadInterstitial() {
-    if (!ready || interstitialLoaded) return;
+    if (!ready || removed || interstitialLoaded) return;
     interstitialLoaded = !!(await quiet(backend.prepareInterstitial({ adId: CONFIG.interstitial, isTesting: CONFIG.TESTING })));
   }
   async function preloadRewarded() {
@@ -54,8 +55,9 @@
     CONFIG,
 
     // Starts AdMob and asks for consent where the law requires it (EEA/UK).
-    async init() {
+    async init({ adsRemoved } = {}) {
       backend = pluginBackend();
+      removed = !!adsRemoved;
       if (!backend) return;
       try {
         await backend.initialize({ initializeForTesting: CONFIG.TESTING });
@@ -80,9 +82,14 @@
     privacyOptionsRequired() { return ready && privacyOptionsRequired; },
     showPrivacyOptions() { return ready ? quiet(backend.showPrivacyOptionsForm()) : Promise.resolve(); },
 
+    setRemoved(value) {
+      removed = !!value;
+      if (removed) Ads.hideBanner();
+    },
+
     // Banner on menu screens only, never over the board during play.
     async showBanner() {
-      if (!ready || bannerShown) return;
+      if (!ready || removed || bannerShown) return;
       bannerShown = true;
       setBannerSpace(60);
       await quiet(backend.showBanner({ adId: CONFIG.banner, adSize: 'ADAPTIVE_BANNER', position: 'BOTTOM_CENTER', margin: 0, isTesting: CONFIG.TESTING }));
@@ -98,7 +105,7 @@
     // Always resolves, ad or not.
     async afterLoss() {
       losses++;
-      if (!ready || losses < CONFIG.LOSSES_PER_AD) return false;
+      if (!ready || removed || losses < CONFIG.LOSSES_PER_AD) return false;
       if (now() - lastInterstitial < CONFIG.MIN_SECONDS_BETWEEN * 1000) return false;
       if (!interstitialLoaded) { preloadInterstitial(); return false; }
       interstitialLoaded = false;

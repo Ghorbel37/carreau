@@ -108,7 +108,7 @@
       <div class="stat-grid" id="statGrid"></div>
       <div class="head"><strong>Achievements</strong><span class="muted" id="achCount"></span></div>
       <ul class="ach" id="achList"></ul>
-      <div class="row app-only"><button class="ghost small" id="rateBtn">Rate Carreau</button><button class="ghost small" id="adPrivacy" hidden>Privacy choices</button></div>
+      <div class="row app-only"><button class="ghost small" id="rateBtn">Rate Carreau</button><button class="ghost small" id="removeAds">Remove ads</button><button class="ghost small" id="adPrivacy" hidden>Privacy choices</button></div>
       <p class="muted"><span id="version"></span> · <a href="privacy.html" target="_blank" rel="noopener">Privacy policy</a></p>
     </div>
   </section>
@@ -135,6 +135,16 @@
         <button class="tog" data-toggle="music" aria-label="Music"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 17.5V5.5l10-2v12"/><circle cx="6.5" cy="17.5" r="2.5" fill="currentColor"/><circle cx="16.5" cy="15.5" r="2.5" fill="currentColor"/><path class="off" d="M3.5 3.5l17 17"/></svg></button>
         <button class="tog" data-toggle="vibe" aria-label="Vibration"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="3.5" width="8" height="17" rx="1.8"/><path class="on" d="M4.5 8.5v7M2 10.5v3M19.5 8.5v7M22 10.5v3"/><path class="off" d="M3.5 3.5l17 17"/></svg></button>
       </div>
+    </div>
+  </div>
+
+  <!-- Remove ads: a one-time purchase once the game is on Google Play. -->
+  <div class="overlay" id="adsInfo" role="dialog" aria-modal="true" aria-labelledby="adsInfoTitle" hidden>
+    <div class="card">
+      <h2 id="adsInfoTitle">Remove ads</h2>
+      <p>Removing ads will be a small one-time purchase once Carreau is on Google Play. Thanks for supporting the game!</p>
+      <p class="muted">Rewarded ads (continue a run, extra time) always stay optional.</p>
+      <div class="menu"><button class="go big" id="adsInfoOk">OK</button></div>
     </div>
   </div>
 

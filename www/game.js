@@ -42,7 +42,7 @@
     get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
   };
-  const settings = Object.assign({ sound: true, music: true, vibe: true, world: 'tri', tutorialDone: false }, store.get('carreau-settings', {}));
+  const settings = Object.assign({ sound: true, music: true, vibe: true, world: 'tri', tutorialDone: false, adsRemoved: false }, store.get('carreau-settings', {}));
   const saveSettings = () => store.set('carreau-settings', settings);
   const save = (() => {
     let s = store.get('carreau-save', null);
@@ -737,6 +737,7 @@
   // Android back button and Esc: in a game, pause; on the pause menu, resume;
   // elsewhere step back one screen; on the menu, leave the app.
   function back() {
+    if (!$('adsInfo').hidden) { $('adsInfo').hidden = true; return; }
     if (screen === 'paused') return resume();
     if (G && G.offering) return $('resAlt').click(); // back on a "watch an ad?" offer = no thanks
     if (G) return pause();
@@ -849,6 +850,22 @@
   });
   $('rateBtn').addEventListener('click', () => { window.open(PLAY_URL, '_blank'); });
   $('adPrivacy').addEventListener('click', () => Ads.showPrivacyOptions());
+  // "Remove ads" will be a one-time in-app purchase on Google Play. Billing needs the app to be
+  // set up in Play Console first (docs/PLAY_STORE.md); once it is, a successful purchase only
+  // has to call setAdsRemoved(true).
+  $('removeAds').addEventListener('click', () => { $('adsInfo').hidden = false; $('adsInfoOk').focus({ preventScroll: true }); });
+  $('adsInfoOk').addEventListener('click', () => { $('adsInfo').hidden = true; });
+  function setAdsRemoved(value) {
+    settings.adsRemoved = !!value; saveSettings();
+    if (ADS) Ads.setRemoved(settings.adsRemoved);
+    syncRemoveAds();
+  }
+  function syncRemoveAds() {
+    $('removeAds').textContent = settings.adsRemoved ? 'Ads removed \u2713' : 'Remove ads';
+    $('removeAds').disabled = settings.adsRemoved;
+  }
+  window.CarreauSetAdsRemoved = setAdsRemoved; // for the billing plugin once it exists
+  syncRemoveAds();
   ['slow', 'skip'].forEach(k => $('item-' + k).addEventListener('click', () => useItem(k)));
 
   // ---------- Settings ----------
@@ -932,7 +949,7 @@
   const hasProgress = save.stats.runs > 0 || save.stats.walls > 0 || WORLD_ORDER.some(w => Object.values(save.bests[w]).some(v => v > 0));
   if (!settings.tutorialDone && !hasProgress) startGame('tutorial');
   // AdMob: consent form where required, then the banner if a menu is showing.
-  if (ADS) Ads.init().then(() => { if (!document.body.classList.contains('playing') && screen !== 'result') Ads.showBanner(); });
+  if (ADS) Ads.init({ adsRemoved: settings.adsRemoved }).then(() => { if (!document.body.classList.contains('playing') && screen !== 'result') Ads.showBanner(); });
 
   // Offline support on the web (the app already ships its files).
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !isApp) {

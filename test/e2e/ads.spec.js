@@ -122,3 +122,31 @@ test('web: never touches ads, even if a backend exists', async ({ page }) => {
   await page.locator('#statsBtn').click();
   await expect(page.locator('#adPrivacy')).toBeHidden();
 });
+
+test('app: Remove ads explains the coming purchase; once removed, no banner or full-screen ads, rewarded stays', async ({ page }) => {
+  await fakeAds(page);
+  await page.goto('/');
+  await page.locator('#statsBtn').click();
+  await expect(page.locator('#removeAds')).toHaveText('Remove ads');
+  await page.locator('#removeAds').click();
+  await expect(page.locator('#adsInfo')).toBeVisible();
+  await page.keyboard.press('Escape'); // back closes it
+  await expect(page.locator('#adsInfo')).toBeHidden();
+  await expect(page.locator('#stats')).toBeVisible();
+
+  // What a completed purchase will do.
+  await page.evaluate(() => window.CarreauSetAdsRemoved(true));
+  await expect(page.locator('#removeAds')).toHaveText('Ads removed ✓');
+  await expect(page.locator('#removeAds')).toBeDisabled();
+  await page.clock.install();
+  await page.goto('/?kinds=&drops=');
+  for (let run = 1; run <= 2; run++) {
+    await page.locator('[data-mode=gates]').click();
+    await crashOut(page);
+    await expect(page.locator('#resMain')).toHaveText('▶ Continue'); // rewarded ads stay optional
+    await page.locator('#resAlt').click();
+    await page.locator('#resAlt').click();
+  }
+  expect(await calls(page, 'showInterstitial')).toBe(0);
+  expect(await calls(page, 'showBanner')).toBe(0);
+});

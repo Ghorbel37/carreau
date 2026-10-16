@@ -425,3 +425,6 @@ body.revealing header { animation: revealDown .45s cubic-bezier(.34,1.56,.64,1) 
 @media (prefers-reduced-motion: reduce) {
   #home.reveal > *, #home.reveal .modes > *, body.revealing header, .mode.hero.pulse { animation: none; }
 }
+
+.row.app-only { justify-content: center; flex-wrap: wrap; gap: 8px; }
+.ghost.small:disabled { opacity: .6; box-shadow: none; cursor: default; }

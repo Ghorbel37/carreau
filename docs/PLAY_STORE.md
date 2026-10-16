@@ -71,6 +71,8 @@ Until this step the app shows Google's **test ads**, which pay nothing.
    - `www/ads.js`: `TESTING: false` and your `banner`, `interstitial` and `rewarded` unit IDs.
 6. After the app is live on Play, link it in AdMob (App settings › App store details) and publish the `app-ads.txt` line AdMob gives you (it must be at the root of a website you list as the developer site).
 
+**Remove ads** (Stats screen in the app): for now it explains that removing ads will be a one-time purchase. The game side is ready: `setAdsRemoved(true)` in `www/game.js` (exposed as `window.CarreauSetAdsRemoved`) hides banners and full-screen ads for good, while rewarded ads stay optional. Making it a real purchase needs the app in Play Console, a one-time in-app product (Monetize › Products › In-app products, e.g. `remove_ads`) and a billing plugin; add those once the app exists in Play Console.
+
 **Never tap your own live ads**; AdMob can ban the account. Add your phone as a test device in AdMob (Settings › Test devices) before installing a build with real IDs.
 
 ## Creating the app in Play Console
